@@ -41,7 +41,7 @@ flowchart LR
     T --> D[(本地 JSON 数据)]
     T --> F[本地上传文件]
     T --> DS[DeepSeek]
-    T --> QW[千问视觉]
+    T --> ZV[智谱视觉]
     T --> XF[科大讯飞]
 ```
 
@@ -50,7 +50,7 @@ flowchart LR
 - 数据：教师电脑上的 `data/db.json`；
 - 文件：教师电脑上的 `uploads/`；
 - PWA：Workbox 自动生成 Service Worker；
-- AI：三个彼此独立的服务适配器，便于更换供应商。
+- AI：DeepSeek、智谱视觉和科大讯飞三个彼此独立的服务适配器，便于更换供应商。
 
 `data/`、`uploads/`、`.env` 均已加入 `.gitignore`。
 
@@ -139,23 +139,25 @@ DEEPSEEK_MODEL=deepseek-v4-flash
 
 接口采用官方 [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion)。
 
-### 2. 阿里云百炼 / 千问视觉：手写与公式识别
+### 2. 智谱视觉：手写、公式与解题步骤识别
 
 ```env
-DASHSCOPE_API_KEY=你的百炼API Key
-QWEN_VL_BASE_URL=https://你的WorkspaceId.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
-QWEN_VL_MODEL=qwen-vl-plus
+ZHIPU_API_KEY=你的智谱API Key
+ZHIPU_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+ZHIPU_VISION_MODEL=glm-4v-plus-0111
 ```
+
+这里不再使用阿里云百炼。`GLM-4V-Plus-0111` 只承担“答题图片 → 文字、公式、步骤”的提取，评分仍由 DeepSeek 完成。官方当前价格为 4 元 / 百万 Tokens，图片与输出均计入 Token 用量；接口返回 usage 时，学生上传后的提示会显示本次消耗。
 
 注册并配置：
 
-1. 注册阿里云并开通 [大模型服务平台百炼](https://bailian.console.aliyun.com/)；
-2. 选择与部署位置一致的地域和业务空间；
-3. 在 API Key 页面创建 Key，并立即保存弹窗中显示的 API Key 与 API Host；
-4. 将 API Host 原样填写到 `QWEN_VL_BASE_URL`，不要照抄其他地域的地址；
-5. 将 Key 与模型名写入 `.env` 后重启。
+1. 注册并登录 [智谱 AI 开放平台](https://open.bigmodel.cn/)；
+2. 在控制台的 API Keys 页面创建一个 Key；
+3. 按需充值，平台按实际 Token 用量扣费，不需要购买百炼工作空间；
+4. 将 Key 写入 `.env` 后重启服务；
+5. 后续如需更换视觉模型，只修改 `ZHIPU_VISION_MODEL` 即可。
 
-百炼的新 Key 可能以 `sk-ws` 开头，明文只在创建时显示一次。参见阿里云官方的 [获取 API Key](https://help.aliyun.com/zh/model-studio/get-api-key/) 与 [OpenAI 兼容接口](https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions)。
+接口使用智谱官方 OpenAI 兼容的 `/chat/completions`，图片以 Base64 留在教师电脑后端发送。参见 [GLM-4V-Plus-0111 模型说明](https://docs.bigmodel.cn/cn/guide/models/vlm/glm-4v-plus-0111) 与 [OpenAI 兼容接口](https://docs.bigmodel.cn/cn/guide/develop/openai/introduction)。
 
 ### 3. 科大讯飞：教师语音转文字
 
@@ -191,7 +193,7 @@ export interface QuestionBankProvider {
 
 - 单选、多选、判断和可精确匹配的填空题优先程序判题；
 - 主观题才调用 DeepSeek，失败时回退到启发式评分；
-- 图片先由千问视觉提取原始作答，再进入判题与诊断；
+- 图片先由智谱视觉提取原始作答，再进入判题与诊断；
 - 班级正确率、掌握度、分布和趋势均由真实得分计算；
 - AI 只负责解释、总结和建议，不直接虚构统计数字；
 - 学生端接口不会返回参考答案，提交完成后才返回评分反馈。

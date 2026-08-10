@@ -74,20 +74,21 @@ export async function gradeSubjective(question: Question, answer: string | strin
 }
 
 export async function extractAnswerFromImage(filePath: string, mimeType: string) {
-  const key = process.env.DASHSCOPE_API_KEY
-  if (!key) return { text: '', note: '已保存图片；配置千问视觉 API 后可自动识别手写答案。', provider: 'demo' }
+  const key = process.env.ZHIPU_API_KEY
+  if (!key) return { text: '', note: '已保存图片；配置智谱视觉 API 后可自动识别手写答案。', provider: 'demo' }
   const base64 = fs.readFileSync(filePath).toString('base64')
-  const base = (process.env.QWEN_VL_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1').replace(/\/$/, '')
+  const base = (process.env.ZHIPU_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4').replace(/\/$/, '')
   const response = await fetch(`${base}/chat/completions`, {
     method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model: process.env.QWEN_VL_MODEL || 'qwen-vl-plus', messages: [{ role: 'user', content: [
+    body: JSON.stringify({ model: process.env.ZHIPU_VISION_MODEL || 'glm-4v-plus-0111', messages: [{ role: 'user', content: [
       { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
       { type: 'text', text: '请准确提取这张学生答题图片中的答案、公式和解题步骤。保留原有顺序，只输出识别到的作答文字，不要评分。' }
-    ] }] }), signal: AbortSignal.timeout(60000)
+    ] }], max_tokens: 2048, temperature: 0.1 }), signal: AbortSignal.timeout(60000)
   })
-  if (!response.ok) throw new Error(`千问视觉请求失败：${response.status}`)
-  const data = await response.json() as { choices?: { message?: { content?: string } }[] }
-  return { text: data.choices?.[0]?.message?.content || '', note: '千问视觉识别完成', provider: 'qwen' }
+  if (!response.ok) throw new Error(`智谱视觉请求失败：${response.status} ${await response.text()}`)
+  const data = await response.json() as { choices?: { message?: { content?: string } }[]; usage?: { total_tokens?: number } }
+  const tokenNote = data.usage?.total_tokens ? `，本次使用 ${data.usage.total_tokens} Tokens` : ''
+  return { text: data.choices?.[0]?.message?.content || '', note: `智谱视觉识别完成${tokenNote}`, provider: 'zhipu', usage: data.usage }
 }
 
 export async function teacherAssistant(message: string, db: Database, report?: ClassReport | null) {

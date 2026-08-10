@@ -36,7 +36,7 @@ app.get('/api/health', (_req, res) => {
   const networks = Object.values(os.networkInterfaces()).flat().filter(item => item?.family === 'IPv4' && !item.internal).map(item => item?.address)
   res.json({
     ok: true, mode: process.env.DEEPSEEK_API_KEY ? 'ai' : 'demo',
-    providers: { deepseek: Boolean(process.env.DEEPSEEK_API_KEY), qwenVision: Boolean(process.env.DASHSCOPE_API_KEY), xfyun: Boolean(process.env.XFYUN_APP_ID) },
+    providers: { deepseek: Boolean(process.env.DEEPSEEK_API_KEY), zhipuVision: Boolean(process.env.ZHIPU_API_KEY), xfyun: Boolean(process.env.XFYUN_APP_ID) },
     addresses: networks.map(address => `http://${address}:${port}`)
   })
 })

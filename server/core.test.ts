@@ -1,9 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import type { Question } from '../shared/types.js'
 import { programGrade, heuristicSubjectiveGrade } from './grading.js'
 import { buildClassReport, buildStudentProfile } from './reports.js'
 import { store } from './store.js'
+import { extractAnswerFromImage } from './ai.js'
 
 const baseQuestion: Question = {
   id: 'test-q', courseId: 'test-course', knowledgePointId: 'test-kp', type: 'single', difficulty: '基础',
@@ -37,4 +41,31 @@ test('示例数据能生成班级报告和学生画像', () => {
   assert.ok((report?.knowledgeMastery.length || 0) >= 3)
   assert.equal(profile?.student.name, '林晓雨')
   assert.ok((profile?.mastery.length || 0) >= 1)
+})
+
+test('图片识别使用智谱视觉并返回 Token 用量', async () => {
+  const originalFetch = globalThis.fetch
+  const originalKey = process.env.ZHIPU_API_KEY
+  const imagePath = path.join(os.tmpdir(), `zhixing-vision-${Date.now()}.png`)
+  fs.writeFileSync(imagePath, Buffer.from([137, 80, 78, 71]))
+  process.env.ZHIPU_API_KEY = 'test-zhipu-key'
+  try {
+    globalThis.fetch = async (input, init) => {
+      assert.equal(String(input), 'https://open.bigmodel.cn/api/paas/v4/chat/completions')
+      assert.equal((init?.headers as Record<string, string>).authorization, 'Bearer test-zhipu-key')
+      const body = JSON.parse(String(init?.body)) as { model: string; messages: { content: { image_url?: { url: string } }[] }[] }
+      assert.equal(body.model, 'glm-4v-plus-0111')
+      assert.match(body.messages[0].content[0].image_url?.url || '', /^data:image\/png;base64,/) 
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'x=2，计算过程完整' } }], usage: { total_tokens: 321 } }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    const result = await extractAnswerFromImage(imagePath, 'image/png')
+    assert.equal(result.provider, 'zhipu')
+    assert.equal(result.text, 'x=2，计算过程完整')
+    assert.match(result.note, /321 Tokens/)
+  } finally {
+    globalThis.fetch = originalFetch
+    if (originalKey === undefined) delete process.env.ZHIPU_API_KEY
+    else process.env.ZHIPU_API_KEY = originalKey
+    fs.rmSync(imagePath, { force: true })
+  }
 })
