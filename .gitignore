@@ -12,3 +12,8 @@ uploads/
 coverage/
 .tmp-ppt-inspection/
 *.ppt
+.tmp-installer-test/
+release/
+student-android/.gradle/
+student-android/**/build/
+*.apk

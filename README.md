@@ -50,7 +50,32 @@ flowchart LR
 
 ## 安装与运行
 
-要求 Node.js 20+ 和 pnpm 10+。
+教师电脑使用下面的一键安装时，无需预装 Node.js 或 pnpm。
+
+### Windows 一键安装（教师电脑推荐）
+
+直接双击项目根目录的 `安装知行AI助教.bat`。安装程序会：
+
+1. 下载并校验官方 Node.js LTS 便携运行时，不使用电脑中已有的 Node 环境；
+2. 安装依赖并构建生产版本；
+3. 安装到 `%LOCALAPPDATA%\Programs\ZhixingAI`；
+4. 创建桌面“知行 AI 教学诊断”快捷方式；
+5. 请求一次 Windows 管理员授权，为专用网络开放 TCP 4173；
+6. 启动服务并打开教师端。
+
+首次使用需要联网下载运行环境和依赖。以后双击桌面图标即可启动，不需要打开命令行。开始菜单同时提供“配置 AI 服务”“停止本地服务”和“卸载”入口。重新安装或升级时会保留原有 `data`、`uploads` 和 `.env`。
+
+GitHub Actions 的 `Build Windows installer` 工作流还会生成包含 Node 运行时和生产依赖的 `.exe` 一键安装包及便携版 ZIP。下载 `.exe` 后安装不再需要 Node.js 或 pnpm；便携版解压后双击“启动知行课堂.bat”即可。未签名的测试版可能显示 Windows SmartScreen 提示。
+
+### 学生端 Android APK
+
+`student-android/` 是独立的轻量 Android 客户端。学生手机连接教师热点后，APK 默认打开 `http://192.168.137.1:4173/join`；如果教师电脑地址不同，可点击顶部“连接设置”修改。APK 只加载教师电脑提供的学生页面，不包含后端、课程数据或 AI Key，因此教师端更新题目和页面后无需重新发布 APK。
+
+APK 支持填写班级姓名、答题、诊断，以及从相册选择或直接拍摄手写答案。教师端当前发布的课堂会直接出现在学生入口；演示数据中若同时保留多个课件课堂，则先选择本节展示内容。`Build student Android APK` 工作流会生成可直接安装的演示 APK。当前自动产物使用 Android debug 签名，适合内部演示和课件录制；正式长期分发前应配置固定 release keystore。
+
+### 开发方式
+
+源码开发要求 Node.js 20+ 和 pnpm 10+。
 
 ```bash
 pnpm install

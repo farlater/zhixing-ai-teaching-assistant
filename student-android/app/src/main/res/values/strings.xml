@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">知行课堂</string>
+    <string name="toolbar_title">知行课堂</string>
+    <string name="connection_settings">连接设置</string>
+    <string name="teacher_address">教师电脑地址</string>
+    <string name="teacher_address_hint">例如：http://192.168.137.1:4173</string>
+    <string name="save_and_connect">保存并连接</string>
+    <string name="cancel">取消</string>
+    <string name="connection_failed">无法连接教师电脑</string>
+    <string name="connection_failed_detail">请确认手机已经连接教师热点，并检查教师电脑地址和防火墙设置。</string>
+    <string name="retry">重新连接</string>
+</resources>
