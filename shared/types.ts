@@ -132,12 +132,20 @@ export interface Database {
   settings?: {
     demoShowcase?: boolean
     demoSeedVersion?: number
+    reportDiagnoses?: Record<string, ReportDiagnosis>
     network?: {
       hotspotSsid: string
       hotspotPassword: string
       preferredAddress?: string
     }
   }
+}
+
+export interface ReportDiagnosis {
+  summary: string
+  suggestions: string[]
+  updatedAt: string
+  source: 'preset' | 'bailian' | 'fallback'
 }
 
 export interface GenerateConfig {
@@ -160,4 +168,5 @@ export interface ClassReport {
   errorTypes: { name: string; value: number }[]
   students: { id: string; name: string; score: number; rate: number; weakPoint: string }[]
   suggestions: string[]
+  diagnosis: ReportDiagnosis
 }

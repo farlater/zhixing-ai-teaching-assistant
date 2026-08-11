@@ -28,7 +28,7 @@ export default function Assistant() {
     api<{ providers: { speech: boolean } }>('/api/health').then(data => setBailianSpeechReady(data.providers.speech))
     return () => { recognition.current?.stop(); if (pcmRecorder.current) void pcmRecorder.current.stop() }
   }, [])
-  useEffect(() => bottom.current?.scrollIntoView({ behavior: 'smooth' }), [messages, sending])
+  useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, sending])
   async function send(text = input) {
     const content = text.trim(); if (!content || sending) return
     setMessages(list => [...list, { role: 'user', text: content }]); setInput(''); setSending(true)

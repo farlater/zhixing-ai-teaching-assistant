@@ -7,7 +7,7 @@ import { store } from './store.js'
 import { asyncRoute, id, loadEnv, now } from './utils.js'
 import { extractMaterial } from './materials.js'
 import { extractWithMinerU, mineruReady, mineruSupports } from './mineru.js'
-import { generateQuestions, gradeSubjective, extractAnswerFromImage, teacherAssistant, describeInstructionalImage, bailianReady } from './ai.js'
+import { generateQuestions, gradeSubjective, extractAnswerFromImage, teacherAssistant, describeInstructionalImage, bailianReady, generateClassDiagnosis, generatePracticeQuestion } from './ai.js'
 import { programGrade } from './grading.js'
 import { buildClassReport, buildStudentProfile } from './reports.js'
 import { questionBank } from './questionBank.js'
@@ -475,6 +475,16 @@ app.get('/api/reports/:assessmentId', (req, res) => {
   res.json(report)
 })
 
+app.post('/api/reports/:assessmentId/diagnosis/refresh', asyncRoute(async (req, res) => {
+  const report = buildClassReport(store.read(), req.params.assessmentId)
+  if (!report) return res.status(404).json({ error: '课堂不存在' })
+  const diagnosis = await generateClassDiagnosis(report)
+  store.update(db => {
+    db.settings = { ...db.settings, reportDiagnoses: { ...(db.settings?.reportDiagnoses || {}), [req.params.assessmentId]: diagnosis } }
+  })
+  res.json(buildClassReport(store.read(), req.params.assessmentId))
+}))
+
 app.get('/api/students', (_req, res) => {
   const db = store.read()
   res.json(db.students.map(student => ({ ...student, submissionCount: db.submissions.filter(item => item.studentId === student.id).length })))
@@ -490,9 +500,19 @@ app.post('/api/practices', asyncRoute(async (req, res) => {
   const db = store.read()
   const point = db.knowledgePoints.find(item => item.id === req.body.knowledgePointId)
   if (!point) return res.status(404).json({ error: '知识点不存在' })
-  const typeByMode = { similar: 'short', formula: 'blank', recall: 'short', error: 'short' } as const
-  const questions = await generateQuestions({ courseId: point.courseId, knowledgePointIds: [point.id], count: 1, types: [typeByMode[req.body.mode as keyof typeof typeByMode] || 'short'], difficulty: '基础', source: 'ai' }, db)
-  const practice = { id: id('practice'), studentId: req.body.studentId, knowledgePointId: point.id, mode: req.body.mode || 'similar', question: { ...questions[0], source: 'practice' as const }, completed: false, createdAt: now() }
+  const sourceQuestion = req.body.questionId
+    ? db.questions.find(item => item.id === req.body.questionId)
+    : undefined
+  const latestAnswers = db.submissions
+    .filter(item => item.studentId === req.body.studentId && item.status === 'completed')
+    .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))
+    .flatMap(item => item.answers)
+  const lastAnswer = sourceQuestion
+    ? latestAnswers.find(answer => answer.questionId === sourceQuestion.id)
+    : latestAnswers.find(answer => db.questions.find(question => question.id === answer.questionId)?.knowledgePointId === point.id)
+  const mode = (['similar', 'formula', 'recall', 'error'].includes(req.body.mode) ? req.body.mode : 'similar') as 'similar' | 'formula' | 'recall' | 'error'
+  const question = await generatePracticeQuestion({ mode, point, sourceQuestion, lastAnswer }, db)
+  const practice = { id: id('practice'), studentId: req.body.studentId, knowledgePointId: point.id, mode, question, completed: false, createdAt: now() }
   store.update(data => data.practices.push(practice))
   res.status(201).json(practice)
 }))
