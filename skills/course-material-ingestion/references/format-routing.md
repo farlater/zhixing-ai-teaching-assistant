@@ -12,9 +12,15 @@
 
 Use a hybrid pass for Office files: direct parsing preserves semantic structure, while selective OCR of extracted images recovers text that native parsers miss.
 
-## Optional enhancement engines
+## Active cloud route
 
-- [MinerU](https://github.com/opendatalab/MinerU) converts PDF, images and Office files to Markdown/JSON, including formulas, tables, reading order and OCR. Consider it when the teacher PC can afford its larger installation.
+- When `MINERU_API_TOKEN` is configured, send PDF, images, DOC/DOCX and PPT/PPTX to the official MinerU Precision Extract API with `model_version=vlm`, OCR, formulas and tables enabled. Preserve the returned `full.md`, content-list/intermediate JSON and images.
+- Inspect MinerU content-list output after extraction. Scanned-page text, formulas and structured tables are already handled by MinerU and must not be sent to another vision model. Only extracted `image` / `chart` blocks without semantic `content` may enter the secondary image-description pass.
+- Plain text, Markdown, CSV and JSON remain local deterministic reads.
+
+## Local fallback and optional engines
+
+- [MinerU](https://github.com/opendatalab/MinerU) can also run locally, but the current product uses its official cloud API to avoid teacher-PC model requirements.
 - [Docling](https://github.com/docling-project/docling) provides a unified document representation, advanced PDF layout understanding, OCR and Markdown/JSON export. Consider it for complex tables or multi-column documents.
 
-Do not silently switch to an optional engine or truncate selected pages/images. Record the chosen parser and any failed item in the material notes.
+Do not silently switch parsers or truncate selected pages/images. Record the chosen parser, provider task ID and any failed item in the material notes.

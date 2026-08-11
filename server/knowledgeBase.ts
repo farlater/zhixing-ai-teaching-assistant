@@ -41,8 +41,8 @@ export function syncKnowledgeBase(db: Database, courseId?: string) {
       add(path.join('01-knowledge-points', `${safe(point.id)}.md`), point.name, 'knowledge-point', frontmatter({ type: 'knowledge-point', courseId: course.id, knowledgePointId: point.id }) + `# ${point.name}\n\n${point.description}\n\n${point.formula ? `## 公式 / 要点\n\n${point.formula}` : ''}`, { knowledgePointIds: [point.id] })
     }
     for (const material of db.materials.filter(item => item.courseId === course.id)) {
-      const figures = (material.imageUrls || []).map((url, index) => `![资料插图 ${index + 1}](${url})`).join('\n\n')
-      const body = `${frontmatter({ type: 'material', courseId: course.id, source: material.path })}# ${material.name}\n\n${material.extractedText || '> 暂无可提取文本'}\n\n${figures ? `## 原始页面与插图\n\n${figures}` : ''}\n\n${material.extractionNotes?.length ? `## 处理说明\n\n${material.extractionNotes.map(note => `- ${note}`).join('\n')}` : ''}`
+      const figures = material.parser === 'mineru' ? '' : (material.imageUrls || []).map((url, index) => `![资料插图 ${index + 1}](${url})`).join('\n\n')
+      const body = `${frontmatter({ type: 'material', courseId: course.id, source: material.path, parser: material.parser })}# ${material.name}\n\n${material.extractedText || '> 暂无可提取文本'}\n\n${figures ? `## 原始页面与插图\n\n${figures}` : ''}\n\n${material.extractionNotes?.length ? `## 处理说明\n\n${material.extractionNotes.map(note => `- ${note}`).join('\n')}` : ''}`
       const relative = path.join('02-materials', `${safe(material.id)}.md`)
       add(relative, material.name, 'material', body)
       material.knowledgeFile = path.join(base, relative).replace(/\\/g, '/')

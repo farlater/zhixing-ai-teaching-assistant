@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import { store } from './store.js'
 import { asyncRoute, id, loadEnv, now } from './utils.js'
 import { extractMaterial } from './materials.js'
+import { extractWithMinerU, mineruReady, mineruSupports } from './mineru.js'
 import { generateQuestions, gradeSubjective, extractAnswerFromImage, teacherAssistant, describeInstructionalImage, bailianReady } from './ai.js'
 import { programGrade } from './grading.js'
 import { buildClassReport, buildStudentProfile } from './reports.js'
@@ -26,7 +27,7 @@ const upload = multer({
     destination: uploadDir,
     filename: (_req, file, callback) => callback(null, `${Date.now()}-${id('file')}${path.extname(file.originalname)}`)
   }),
-  limits: { fileSize: 40 * 1024 * 1024 }
+  limits: { fileSize: 200 * 1024 * 1024 }
 })
 
 app.use(cors())
@@ -35,10 +36,11 @@ app.use('/uploads', express.static(uploadDir))
 
 app.get('/api/health', (_req, res) => {
   const connected = bailianReady()
+  const mineru = mineruReady()
   res.json({
-    ok: true, mode: connected ? 'ai' : 'demo',
-    providers: { bailian: connected, text: connected, vision: connected, speech: connected },
-    models: { text: process.env.BAILIAN_TEXT_MODEL || 'deepseek-v4-flash', vision: process.env.BAILIAN_VISION_MODEL || 'qwen3-vl-flash', speech: process.env.BAILIAN_ASR_MODEL || 'qwen3-asr-flash' },
+    ok: true, mode: connected || mineru ? 'ai' : 'demo',
+    providers: { bailian: connected, text: connected, vision: connected, speech: connected, mineru },
+    models: { text: process.env.BAILIAN_TEXT_MODEL || 'deepseek-v4-flash', vision: process.env.BAILIAN_VISION_MODEL || 'qwen3-vl-flash', speech: process.env.BAILIAN_ASR_MODEL || 'qwen3-asr-flash', document: process.env.MINERU_MODEL_VERSION || 'vlm' },
     addresses: lanAddresses(port)
   })
 })
@@ -126,13 +128,85 @@ app.post('/api/courses/:courseId/materials', upload.single('file'), asyncRoute(a
   let originalName = req.file.originalname
   try { originalName = Buffer.from(originalName, 'latin1').toString('utf8') } catch { /* keep original */ }
   const materialId = id('material')
+  const publicBase = `/uploads/materials/${materialId}`
+  const material: Material = {
+    id: materialId, courseId: req.params.courseId, name: originalName, type: req.file.mimetype, size: req.file.size,
+    extractedText: '', path: `/uploads/${req.file.filename}`, imageUrls: [], extractionNotes: [],
+    status: 'processing', createdAt: now()
+  }
+
+  if (mineruReady() && mineruSupports(originalName, req.file.mimetype)) {
+    material.parser = 'mineru'
+    material.extractionNotes = ['等待 MinerU 精准解析']
+    store.update(db => db.materials.push(material))
+    res.status(202).json(material)
+
+    const uploadedFilePath = req.file.path
+    void extractWithMinerU({
+      filePath: uploadedFilePath,
+      originalName,
+      outputDir: path.join(uploadDir, 'materials', materialId),
+      publicBase,
+      structuredDir: path.resolve('data', 'mineru', materialId),
+      dataId: materialId,
+      onStatus: (message, batchId) => store.update(db => {
+        const current = db.materials.find(item => item.id === materialId)
+        if (!current) return
+        current.extractionNotes = [message]
+        if (batchId) current.parserTaskId = batchId
+      })
+    }).then(async extracted => {
+      const enrichmentMode = (process.env.MATERIAL_IMAGE_ENRICHMENT || 'smart').toLowerCase()
+      const candidates = enrichmentMode === 'full' ? extracted.assets : enrichmentMode === 'off' ? [] : extracted.visionCandidates
+      if (candidates.length && bailianReady()) {
+        const descriptions: string[] = []
+        let failedDescriptions = 0
+        for (const [index, asset] of candidates.entries()) {
+          try {
+            const description = await describeInstructionalImage(asset.filePath, asset.mimeType)
+            if (description) descriptions.push(`## 补充插图 ${index + 1}\n\n![原图](${asset.publicUrl})\n\n${description}`)
+          } catch { failedDescriptions += 1 }
+        }
+        if (descriptions.length) {
+          extracted.text = `${extracted.text}\n\n# MinerU 未语义化插图补充\n\n${descriptions.join('\n\n')}`
+          extracted.notes.push(`百炼视觉补充识别 ${descriptions.length} 张 MinerU 未语义化插图/图表`)
+          fs.writeFileSync(path.resolve('data', 'mineru', materialId, 'normalized.md'), extracted.text, 'utf8')
+        }
+        if (failedDescriptions) extracted.notes.push(`${failedDescriptions} 张插图的百炼补充识别失败，MinerU 主解析结果仍已保留`)
+      } else if (candidates.length) {
+        extracted.notes.push(`发现 ${candidates.length} 张未语义化插图；配置百炼 Key 后可自动补充图意`)
+      }
+      let courseId = ''
+      store.update(db => {
+        const current = db.materials.find(item => item.id === materialId)
+        if (!current) return
+        current.extractedText = extracted.text
+        current.imageUrls = extracted.assets.map(item => item.publicUrl)
+        current.extractionNotes = extracted.notes
+        current.pageCount = extracted.pageCount
+        current.parser = extracted.parser
+        current.parserTaskId = extracted.batchId
+        current.status = 'ready'
+        courseId = current.courseId
+      })
+      if (courseId) syncKnowledgeBase(store.read(), courseId)
+    }).catch(error => {
+      store.update(db => {
+        const current = db.materials.find(item => item.id === materialId)
+        if (!current) return
+        current.status = 'failed'
+        current.extractionNotes = [error instanceof Error ? error.message : 'MinerU 资料解析失败']
+      })
+    })
+    return
+  }
+
   let text = ''
   let imageUrls: string[] = []
   let extractionNotes: string[] = []
   let pageCount: number | undefined
   let status: Material['status'] = 'ready'
   try {
-    const publicBase = `/uploads/materials/${materialId}`
     const extracted = await extractMaterial(req.file.path, req.file.mimetype, originalName, path.join(uploadDir, 'materials', materialId), publicBase)
     text = extracted.text; imageUrls = extracted.assets.map(item => item.publicUrl); extractionNotes = extracted.notes; pageCount = extracted.pageCount
     const extension = path.extname(originalName).toLowerCase()
@@ -147,14 +221,18 @@ app.post('/api/courses/:courseId/materials', upload.single('file'), asyncRoute(a
         const description = await describeInstructionalImage(asset.filePath, asset.mimeType)
         if (description) descriptions.push(`## 视觉提取 ${index + 1}\n\n${description}`)
       }
-      if (descriptions.length) text = `${text}\n\n# 图片与扫描页识别\n\n${descriptions.join('\n\n')}`.slice(0, 180000)
+      if (descriptions.length) text = `${text}\n\n# 图片与扫描页识别\n\n${descriptions.join('\n\n')}`
     } else if (shouldReadImages) extractionNotes.push('尚未配置百炼 API，图片已提取保存，配置后重新上传即可识别。')
     else if (extracted.assets.length && visionMode === 'smart') extractionNotes.push(`智能节省模式：已提取 ${extracted.assets.length} 张页面/插图，但正文信息充足，未自动调用视觉模型。`)
   } catch (error) { status = 'failed'; extractionNotes = [error instanceof Error ? error.message : '资料解析失败'] }
-  const material: Material = {
-    id: materialId, courseId: req.params.courseId, name: originalName, type: req.file.mimetype, size: req.file.size,
-    extractedText: text, path: `/uploads/${req.file.filename}`, imageUrls, extractionNotes, pageCount, status, createdAt: now()
-  }
+  material.extractedText = text
+  material.imageUrls = imageUrls
+  material.extractionNotes = mineruSupports(originalName, req.file.mimetype) && !mineruReady()
+    ? ['未配置 MinerU，已使用本地兼容解析器。', ...extractionNotes]
+    : extractionNotes
+  material.pageCount = pageCount
+  material.parser = 'builtin'
+  material.status = status
   store.update(db => db.materials.push(material))
   syncKnowledgeBase(store.read(), material.courseId)
   res.status(201).json(material)
@@ -170,6 +248,9 @@ app.delete('/api/materials/:id', (req, res) => {
   const assetDir = path.resolve(uploadDir, 'materials', req.params.id)
   const materialRoot = path.resolve(uploadDir, 'materials')
   if (assetDir.startsWith(`${materialRoot}${path.sep}`) && fs.existsSync(assetDir)) fs.rmSync(assetDir, { recursive: true, force: true })
+  const structuredDir = path.resolve('data', 'mineru', req.params.id)
+  const structuredRoot = path.resolve('data', 'mineru')
+  if (structuredDir.startsWith(`${structuredRoot}${path.sep}`) && fs.existsSync(structuredDir)) fs.rmSync(structuredDir, { recursive: true, force: true })
   store.update(data => { data.materials = data.materials.filter(item => item.id !== req.params.id) })
   if (material) syncKnowledgeBase(store.read(), material.courseId)
   res.status(204).end()

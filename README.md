@@ -10,7 +10,7 @@
 
 - 教师端：课程、知识点、PDF/PPTX/DOCX/图片资料、AI 出题、题库接口、检测发布、逐题与班级报告、学生画像、语音 AI 助教。
 - 学生端：连接教师热点后自动进入唯一活动检测；支持客观题、文字和拍照作答；返回评分、错误原因、相关公式与强化练习。
-- 资料入库：原生提取文本，抽取 Office 插图，扫描型 PDF/图片按需调用百炼视觉；输出带来源的 Markdown 知识目录。
+- 资料入库：MinerU 官方 API 解析 PDF、Office、扫描件、公式、表格与版面；输出 Markdown、结构化 JSON 和独立图片，再对缺少图意的插图选择性调用百炼视觉。
 - AI 问答：按问题检索课程、知识点、题库、课堂、作答和画像文件，减少无关上下文与 Token；回答要求标注来源。
 - Markdown：支持 GFM 表格、列表、代码、KaTeX 公式和本地资料插图，并经过安全清洗。
 - PWA：学生入口可安装到手机桌面，之后连上教师热点并打开 PWA 即可自动进入当前检测。
@@ -26,6 +26,7 @@ flowchart LR
     T --> D[(data/db.json)]
     T --> K[data/knowledge Markdown 目录]
     T --> F[uploads 原始文件与插图]
+    T --> M[MinerU 精准解析 API]
     T --> B[阿里云百炼兼容网关]
     B --> DS[DeepSeek 文本模型]
     B --> VL[千问视觉模型]
@@ -71,7 +72,7 @@ Windows 也可双击 `start.bat`。生产模式教师端为 <http://localhost:41
 
 手机系统不允许 Wi-Fi 二维码在连网后替网页静默启动浏览器，所以“扫码”负责连热点，“打开 PWA/固定地址”由系统安全策略要求。首次访问建议把学生端添加到桌面。Windows 防火墙弹窗出现时需允许 Node.js 在“专用网络”通信。
 
-## 百炼 AI 配置
+## MinerU 与百炼配置
 
 复制模板：
 
@@ -87,17 +88,26 @@ BAILIAN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 BAILIAN_TEXT_MODEL=deepseek-v4-flash
 BAILIAN_VISION_MODEL=qwen3-vl-flash
 BAILIAN_ASR_MODEL=qwen3-asr-flash
+MINERU_API_TOKEN=你的MinerU Token
+MINERU_API_BASE=https://mineru.net/api/v4
+MINERU_MODEL_VERSION=vlm
+MINERU_ENABLE_OCR=true
+MATERIAL_IMAGE_ENRICHMENT=smart
 MATERIAL_VISION_MODE=smart
 ```
 
 如果百炼控制台给出带业务空间 ID 的专属兼容地址，应把 `BAILIAN_BASE_URL` 替换成控制台地址。修改配置后重启服务。
 
-资料视觉默认是节省 Token 的 `smart`：Office 直接解析 XML/正文和媒体，文本型 PDF 不逐页调用模型；仅扫描 PDF、纯图片和正文稀疏的 Office 资料自动视觉识别。符合识别条件时会处理该资料的全部扫描页或提取图片，不设置单份数量上限。临时关闭可设为 `off`，确需对正文充足的资料也进行视觉处理时设为 `full`。
+在 [MinerU API 管理页](https://mineru.net/apiManage/token) 申请 Token 后写入教师电脑 `.env`。Token 只在 Node 后端使用，不会下发给学生。当前使用精准解析 API 的 `vlm` 模型：本地文件先申请签名上传地址，上传后后台轮询，完成时下载结果 ZIP。单文件按官方限制为 200 MB、600 页；教师页面会自动刷新解析状态。
+
+MinerU 负责扫描页 OCR、阅读顺序、公式 LaTeX、表格结构和图片裁切。结果包中的 `full.md` 会写入课程知识目录，原始 Markdown、`content_list.json`、`middle/model` 等 JSON 保存在 `data/mineru/<material-id>/`，图片保存在 `uploads/materials/<material-id>/`。系统检查内容列表后，只把没有语义 `content` 的插图/图表交给百炼视觉补充，不重复识别扫描正文、公式或表格。`MATERIAL_IMAGE_ENRICHMENT=smart` 为默认策略，`off` 完全关闭补充识别，`full` 识别全部提取图片；均不设单份图片数量上限。
+
+未配置 MinerU Token 时，TXT/Markdown/CSV/JSON 始终可本地直接读取，PDF/PPTX/DOCX/图片仍保留轻量兼容解析；此时 `MATERIAL_VISION_MODE` 控制兼容路径的百炼视觉策略。正式课堂资料建议配置 MinerU，以免复杂版式退化。
 
 截至 2026-08-11，本项目按百炼 OpenAI 兼容接口接入：
 
 - DeepSeek 负责出题、主观题评分、诊断、画像和教师问答。模型可按额度和延迟在 `deepseek-v4-flash` / `deepseek-v4-pro` 间切换，参见[百炼 DeepSeek API](https://help.aliyun.com/en/model-studio/deepseek-api)。
-- `qwen3-vl-flash` 负责手写答案、公式、扫描页和资料插图提取；需要更高精度时可改为可用的 Plus 视觉模型，参见[百炼视觉理解](https://help.aliyun.com/zh/model-studio/vision/)。
+- `qwen3-vl-flash` 负责学生手写答案，以及 MinerU 未提供图意文本的课程插图补充；需要更高精度时可改为可用的 Plus 视觉模型，参见[百炼视觉理解](https://help.aliyun.com/zh/model-studio/vision/)。
 - `qwen3-asr-flash` 负责教师中文语音转文字，前端上传 16 kHz 单声道 WAV，参见[Qwen ASR API](https://help.aliyun.com/en/model-studio/qwen-asr-api-reference)。
 
 注册流程：登录[阿里云百炼控制台](https://bailian.console.aliyun.com/)，开通模型服务并创建 API Key；确认所选地域、业务空间和模型额度；把 Key 与对应兼容地址写入 `.env`。不要把真实 Key 放入源码或 Git。
@@ -122,7 +132,7 @@ data/knowledge/<course-id>/
 
 教师助教先检索 `manifest.json`，只读取与问题最相关的少量文件。全局约束在 `prompts/teacher-assistant.md`，资料处理规范在 `skills/course-material-ingestion/`。
 
-默认解析器保持轻量，借鉴了 [MinerU](https://github.com/opendatalab/MinerU) 的“LLM-ready Markdown/JSON、公式与图片保留”思路和 [Docling](https://github.com/docling-project/docling) 的“统一文档结构、直接解析 + OCR 混合路线”。复杂科学 PDF 可在以后把它们接为增强解析器，不影响当前单机运行。
+当前已直接接入 [MinerU 精准解析 API](https://mineru.net/doc/docs/)，不是自行仿写 MinerU。系统消费其 Markdown、内容列表/中间结构 JSON 和图片资源，并把可检索正文同步进现有目录；详细字段以 [MinerU 输出文件说明](https://opendatalab.github.io/MinerU/reference/output_files/) 为准。Docling 不再进入默认运行链路。
 
 ## Markdown 与安全
 

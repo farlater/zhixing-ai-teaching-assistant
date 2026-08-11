@@ -23,6 +23,8 @@ export interface Material {
   extractionNotes?: string[]
   pageCount?: number
   knowledgeFile?: string
+  parser?: 'mineru' | 'builtin'
+  parserTaskId?: string
   status: 'ready' | 'processing' | 'failed'
   createdAt: string
 }

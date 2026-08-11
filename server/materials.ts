@@ -64,20 +64,20 @@ export async function extractMaterial(filePath: string, mimeType: string, origin
   const extension = path.extname(originalName).toLowerCase()
   const notes: string[] = []
   if (['.txt', '.md', '.csv', '.json', '.html'].includes(extension) || mimeType.startsWith('text/')) {
-    return { text: fs.readFileSync(filePath, 'utf8').slice(0, 160000), assets: [], notes }
+    return { text: fs.readFileSync(filePath, 'utf8'), assets: [], notes }
   }
   if (extension === '.pdf' || mimeType === 'application/pdf') {
     const buffer = fs.readFileSync(filePath)
     const result = await pdf(buffer)
     const rendered = await renderPdfPages(buffer, outputDir, publicBase)
     if (result.text.trim().length < 200) notes.push('检测到扫描型或低文本 PDF，将使用页面图像辅助视觉识别。')
-    return { text: result.text.slice(0, 160000), assets: rendered.assets, notes, pageCount: rendered.pageCount }
+    return { text: result.text, assets: rendered.assets, notes, pageCount: rendered.pageCount }
   }
   if (extension === '.docx' || mimeType.includes('wordprocessingml')) {
     const buffer = fs.readFileSync(filePath)
     const [result, zip] = await Promise.all([mammoth.extractRawText({ buffer }), JSZip.loadAsync(buffer)])
     const assets = await officeAssets(zip, ['word/media/'], outputDir, publicBase)
-    return { text: result.value.slice(0, 160000), assets, notes }
+    return { text: result.value, assets, notes }
   }
   if (extension === '.pptx' || mimeType.includes('presentationml')) {
     const zip = await JSZip.loadAsync(fs.readFileSync(filePath))
@@ -85,14 +85,14 @@ export async function extractMaterial(filePath: string, mimeType: string, origin
     const sections: string[] = []
     for (const [index, slide] of slides.entries()) sections.push(`## 第 ${index + 1} 页\n\n${xmlText(await slide.async('text'))}`)
     const assets = await officeAssets(zip, ['ppt/media/'], outputDir, publicBase)
-    return { text: sections.join('\n\n').slice(0, 160000), assets, notes, pageCount: slides.length }
+    return { text: sections.join('\n\n'), assets, notes, pageCount: slides.length }
   }
   if (mimeType.startsWith('image/') || ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'].includes(extension)) {
     fs.mkdirSync(outputDir, { recursive: true })
     const name = `figure-01${extension || '.jpg'}`
     const target = path.join(outputDir, name)
     fs.copyFileSync(filePath, target)
-    return { text: '', assets: [{ name, filePath: target, mimeType: mediaType(name), publicUrl: `${publicBase}/${name}` }], notes: ['图片资料将由百炼视觉提取文字、公式和教学含义。'] }
+    return { text: '', assets: [{ name, filePath: target, mimeType: mediaType(name), publicUrl: `${publicBase}/${name}` }], notes: ['未配置 MinerU 时，图片资料将由百炼视觉提取文字、公式和教学含义。'] }
   }
   throw new Error(`暂不支持 ${extension || mimeType} 格式`)
 }
