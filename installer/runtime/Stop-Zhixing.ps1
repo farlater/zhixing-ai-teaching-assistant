@@ -1,7 +1,9 @@
 ﻿[CmdletBinding()]
-param([string]$InstallRoot = $PSScriptRoot)
+param([string]$InstallRoot = '')
 
 $ErrorActionPreference = 'Stop'
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+if ([string]::IsNullOrWhiteSpace($InstallRoot)) { $InstallRoot = $scriptRoot }
 $installRoot = [IO.Path]::GetFullPath($InstallRoot)
 $pidPath = Join-Path $installRoot 'server.pid'
 if (-not (Test-Path -LiteralPath $pidPath)) { Write-Host '知行服务当前未运行。'; exit 0 }

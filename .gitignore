@@ -14,6 +14,7 @@ coverage/
 *.ppt
 .tmp-installer-test/
 release/
+tmp/
 student-android/.gradle/
 student-android/**/build/
 *.apk

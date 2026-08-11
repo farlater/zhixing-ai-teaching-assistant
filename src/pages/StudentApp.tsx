@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { ArrowLeft, ArrowRight, BookOpen, Camera, Check, CheckCircle2, ChevronRight, Clock3, GraduationCap, Lightbulb, LoaderCircle, RefreshCw, Send, Sparkles, Target, Upload, XCircle } from 'lucide-react'
-import { Link } from 'react-router-dom'
 import type { Assessment, Course, Practice, Question, Student, Submission } from '../../shared/types'
 import { api, post, questionTypeLabel } from '../api'
 import { Empty, Modal, Toast } from '../components'
@@ -12,7 +11,6 @@ type Result = Submission & { questions: Question[] }
 type AnswerDraft = { answer: string | string[]; imageUrl?: string; extractedText?: string; uploadNote?: string }
 
 export default function StudentApp() {
-  const [classrooms, setClassrooms] = useState<Classroom[]>([])
   const [classroom, setClassroom] = useState<Classroom>()
   const [loadingClassroom, setLoadingClassroom] = useState(true)
   const [student, setStudent] = useState<Student>()
@@ -25,14 +23,15 @@ export default function StudentApp() {
   const [practice, setPractice] = useState<Practice>()
   const [toast, setToast] = useState<{ text: string; error?: boolean }>()
   const fileRef = useRef<HTMLInputElement>(null)
-  useEffect(() => { void loadClasses() }, [])
-  async function loadClasses() {
+  useEffect(() => { void loadClassroom() }, [])
+  async function loadClassroom() {
     setLoadingClassroom(true)
     try {
-      const data = await api<Classroom[]>('/api/classrooms/available'); setClassrooms(data)
-    } catch (error) { setClassrooms([]); setToast({ text: (error as Error).message, error: true }) } finally { setLoadingClassroom(false) }
+      const assessmentId = new URLSearchParams(window.location.search).get('assessment')
+      const data = await api<Classroom>(assessmentId ? `/api/classrooms/assessment/${encodeURIComponent(assessmentId)}` : '/api/classrooms/active/current')
+      setClassroom(data)
+    } catch (error) { setClassroom(undefined); setToast({ text: (error as Error).message, error: true }) } finally { setLoadingClassroom(false) }
   }
-  function selectClassroom(selected: Classroom) { setClassroom(selected); setStudent(undefined); setResult(undefined); setAnswers({}); setCurrent(0) }
   async function join(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!classroom) return; const form = new FormData(event.currentTarget); const joined = await post<Student>('/api/students/join', Object.fromEntries(form)); setStudent(joined); localStorage.setItem(`zhixing-student-${classroom.assessment.id}`, JSON.stringify(joined))
   }
@@ -51,8 +50,8 @@ export default function StudentApp() {
     if (!student) return; try { setPractice(await post<Practice>('/api/practices', { studentId: student.id, knowledgePointId, mode })) } catch (error) { setToast({ text: (error as Error).message, error: true }) }
   }
 
-  if (!classroom) return <div className="student-shell join-screen lesson-select-screen"><header className="student-brand"><div><GraduationCap size={23} /></div><span><strong>知行课堂</strong><small>机械原理 · 智慧课堂</small></span></header><main className="lesson-select"><span className="student-eyebrow">课堂入口</span><h1>{loadingClassroom ? '正在载入课程…' : classrooms.length ? '请选择本节课内容' : '老师还没有发布课程'}</h1><p>{loadingClassroom ? '正在连接课堂服务，请稍候' : classrooms.length ? '选择后填写班级与姓名，即可进入课堂检测' : '点击重新检查课程状态。'}</p>{classrooms.length > 0 && <div className="lesson-choice-list">{classrooms.map((item, index) => <button key={item.assessment.id} onClick={() => selectClassroom(item)}><span className="lesson-index">0{index + 1}</span><div><small>{item.course.grade} · {item.course.subject}</small><strong>{item.course.name}</strong><p>{item.assessment.description}</p><em>{item.questions.length} 道图示题 · {item.assessment.timeLimit} 分钟</em></div><ChevronRight /></button>)}</div>}{!classrooms.length && <button className="student-btn" disabled={loadingClassroom} onClick={() => loadClasses()}>{loadingClassroom ? <LoaderCircle className="spin" /> : <>重新检查 <RefreshCw size={18} /></>}</button>}<Link to="/" className="back-home"><ArrowLeft size={15} />返回身份选择</Link></main>{toast && <Toast message={toast.text} type="error" onDone={() => setToast(undefined)} />}</div>
-  if (!student) return <div className="student-shell join-screen"><header className="student-brand"><div><GraduationCap size={23} /></div><span><strong>知行课堂</strong><small>机械原理 · 智慧课堂</small></span></header><main className="join-card identity"><button className="identity-back" onClick={() => setClassroom(undefined)}><ArrowLeft size={15} />重新选择课程</button><div className="course-mini"><BookOpen size={20} /><span><small>{classroom.course.grade} · {classroom.course.subject}</small><strong>{classroom.assessment.title}</strong></span></div><h1>填写课堂信息</h1><p>用于生成你的个人作答诊断</p><form onSubmit={join}><label>班级<select name="className" defaultValue="23级机械设计1班"><option>23级机械设计1班</option><option>23级机械设计2班</option><option>23级智能制造1班</option></select></label><label>姓名<input name="name" required autoFocus placeholder="请输入姓名" /></label><label>学号（选填）<input name="studentNo" placeholder="例如：2023001" /></label><button className="student-btn">进入课堂 <ArrowRight size={19} /></button></form></main></div>
+  if (!classroom) return <div className="student-shell join-screen lesson-select-screen"><header className="student-brand"><div><GraduationCap size={23} /></div><span><strong>知行课堂</strong><small>机械原理 · 课堂检测</small></span></header><main className="lesson-select"><h1>{loadingClassroom ? '正在连接课堂…' : '当前没有已发布的检测'}</h1><p>{loadingClassroom ? '已连接教师热点，正在获取课堂内容。' : '请等待教师发布后重新检查。'}</p><button className="student-btn" disabled={loadingClassroom} onClick={() => loadClassroom()}>{loadingClassroom ? <LoaderCircle className="spin" /> : <>重新检查 <RefreshCw size={18} /></>}</button></main>{toast && <Toast message={toast.text} type="error" onDone={() => setToast(undefined)} />}</div>
+  if (!student) return <div className="student-shell join-screen"><header className="student-brand"><div><GraduationCap size={23} /></div><span><strong>知行课堂</strong><small>机械原理 · 课堂检测</small></span></header><main className="join-card identity"><div className="course-mini"><BookOpen size={20} /><span><small>{classroom.course.grade} · {classroom.course.subject}</small><strong>{classroom.assessment.title}</strong></span></div><h1>填写课堂信息</h1><form onSubmit={join}><label>班级<select name="className" defaultValue="23级机械设计1班"><option>23级机械设计1班</option><option>23级机械设计2班</option><option>23级智能制造1班</option></select></label><label>姓名<input name="name" required autoFocus placeholder="请输入姓名" /></label><label>学号（选填）<input name="studentNo" placeholder="例如：2023001" /></label><button className="student-btn">进入课堂 <ArrowRight size={19} /></button></form></main></div>
   if (result) return <StudentResult result={result} classroom={classroom} student={student} onPractice={startPractice} onBack={() => { setResult(undefined); setAnswers({}); setCurrent(0) }} practice={practice} closePractice={() => setPractice(undefined)} />
   if (!started) return <div className="student-shell"><StudentHeader student={student} /><main className="student-home"><span className="student-eyebrow">课堂检测</span><h1>{classroom.assessment.title}</h1><p>{classroom.assessment.description}</p><div className="test-facts"><span><b>{classroom.questions.length}</b> 道图示题</span><span><b>{classroom.assessment.timeLimit}</b> 分钟</span><span><b>{classroom.submittedCount}</b> 人参与</span></div><div className="before-note"><Lightbulb size={20} /><p>仔细观察机构简图中的构件、齿数和转向箭头。提交后将立即生成逐题诊断，并同步更新班级学情。</p></div><button className="student-btn" onClick={() => setStarted(true)}>开始答题 <ChevronRight size={19} /></button></main></div>
   if (!question || !draft) return null

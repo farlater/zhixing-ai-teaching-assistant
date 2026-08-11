@@ -5,6 +5,10 @@ import { id, now } from './utils.js'
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string | unknown[] }
 
+function promptFile(name: string, fallback: string) {
+  try { return fs.readFileSync(`prompts/${name}.md`, 'utf8').trim() || fallback } catch { return fallback }
+}
+
 function extractJson(text: string) {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]
   const source = fenced || text.slice(text.indexOf(text.includes('[') ? '[' : '{'), Math.max(text.lastIndexOf(']'), text.lastIndexOf('}')) + 1)
@@ -19,14 +23,15 @@ export async function chat(messages: ChatMessage[], options?: { json?: boolean; 
   const key = process.env.DASHSCOPE_API_KEY
   if (!key) throw new Error('BAILIAN_NOT_CONFIGURED')
   const base = (process.env.BAILIAN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1').replace(/\/$/, '')
+  const model = options?.model || process.env.BAILIAN_TEXT_MODEL || 'deepseek-v4-flash'
   const response = await fetch(`${base}/chat/completions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
     body: JSON.stringify({
-      model: options?.model || process.env.BAILIAN_TEXT_MODEL || 'deepseek-v4-flash', messages,
+      model, messages,
       temperature: options?.temperature ?? .3,
       max_tokens: options?.maxTokens || 4096,
-      ...(options?.json ? { response_format: { type: 'json_object' } } : {})
+      ...(options?.json && !model.startsWith('deepseek-') ? { response_format: { type: 'json_object' } } : {})
     }),
     signal: AbortSignal.timeout(60000)
   })
@@ -56,9 +61,9 @@ export async function generateQuestions(config: GenerateConfig, db: Database): P
   const course = db.courses.find(item => item.id === config.courseId)
   const points = db.knowledgePoints.filter(item => config.knowledgePointIds.includes(item.id))
   const materials = db.materials.filter(item => item.courseId === config.courseId && item.status === 'ready').map(item => item.extractedText).join('\n').slice(0, 18000)
-  if (!bailianReady()) return Array.from({ length: config.count }, (_, index) => fallbackQuestion(config, db, index))
+  if (!bailianReady()) throw new Error('尚未配置百炼 API。请先运行“配置AI服务”并填写 DASHSCOPE_API_KEY。')
   const prompt = `请为课程“${course?.name}”（${course?.grade}${course?.subject}）生成 ${config.count} 道课堂诊断题。\n知识点：${JSON.stringify(points.map(point => ({ id: point.id, name: point.name, description: point.description, formula: point.formula })))}\n教师资料：${materials || '暂无资料，请严格围绕知识点'}\n题型只可使用：${config.types.join(',')}，难度：${config.difficulty}。\n返回 JSON 对象 {"questions": [...]}。每题必须包含 knowledgePointId,type,stem,options(若需要),answer,explanation,rubric,formula,maxScore,abilities。type 为 single/multiple/truefalse/blank/short；abilities 只用 概念理解/公式掌握/公式应用/推理/计算/表达。选择题答案用 A/B/C/D，多选用数组。题目必须能区分学生具体错误，答案无歧义。`
-  const raw = await chat([{ role: 'system', content: '你是一名严谨的中学教师和测评专家，只输出指定 JSON。' }, { role: 'user', content: prompt }], { json: true })
+  const raw = await chat([{ role: 'system', content: promptFile('question-generation', '你是高校课程的教学诊断出题助教，只输出指定 JSON。') }, { role: 'user', content: prompt }], { json: true })
   const parsed = extractJson(raw) as { questions?: Partial<Question>[] }
   return (parsed.questions || []).slice(0, config.count).map((question, index) => ({
     ...fallbackQuestion(config, db, index), ...question, id: id('q'), courseId: config.courseId,
@@ -70,7 +75,7 @@ export async function gradeSubjective(question: Question, answer: string | strin
   if (!bailianReady()) return heuristicSubjectiveGrade(question, answer)
   const prompt = `题目：${question.stem}\n学生答案：${Array.isArray(answer) ? answer.join('、') : answer}\n参考答案：${Array.isArray(question.answer) ? question.answer.join('、') : question.answer}\n满分：${question.maxScore}\n评分标准：${question.rubric || question.explanation}\n能力维度：${question.abilities.join('、')}\n请严格依据学生实际作答评分。返回 JSON：{"score":数字,"correct":布尔,"diagnosis":{"summary":"","errorLocation":"","errorReason":"","errorType":"","suggestion":"","relatedConcept":"","abilityScores":{}}}。得分范围 0-${question.maxScore}。`
   try {
-    const raw = await chat([{ role: 'system', content: '你是教学诊断评分器。客观、具体，不臆测学生未写出的内容，只输出 JSON。' }, { role: 'user', content: prompt }], { json: true, temperature: .1 })
+    const raw = await chat([{ role: 'system', content: promptFile('grading-diagnosis', '你是高校课程的教学诊断评分助教。客观、具体，不臆测学生未写出的内容，只输出 JSON。') }, { role: 'user', content: prompt }], { json: true, temperature: .1 })
     const parsed = extractJson(raw) as Omit<AnswerResult, 'questionId' | 'answer'>
     return { questionId: question.id, answer, score: Math.max(0, Math.min(question.maxScore, Number(parsed.score) || 0)), correct: Boolean(parsed.correct), diagnosis: parsed.diagnosis }
   } catch {

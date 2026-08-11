@@ -1,12 +1,15 @@
 ﻿[CmdletBinding()]
 param(
-  [string]$AppRoot = (Join-Path $PSScriptRoot 'app'),
-  [string]$InstallRoot = $PSScriptRoot,
+  [string]$AppRoot = '',
+  [string]$InstallRoot = '',
   [int]$Port = 4173,
   [switch]$NoBrowser
 )
 
 $ErrorActionPreference = 'Stop'
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+if ([string]::IsNullOrWhiteSpace($InstallRoot)) { $InstallRoot = $scriptRoot }
+if ([string]::IsNullOrWhiteSpace($AppRoot)) { $AppRoot = Join-Path $InstallRoot 'app' }
 $appRoot = [IO.Path]::GetFullPath($AppRoot)
 $installRoot = [IO.Path]::GetFullPath($InstallRoot)
 $nodeExecutable = Join-Path $installRoot 'runtime\node.exe'
