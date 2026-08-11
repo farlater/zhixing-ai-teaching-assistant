@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 440">
+  <rect width="900" height="440" rx="28" fill="#f3f7f5"/>
+  <text x="42" y="54" fill="#173f3a" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">基本杆组：两件三副</text>
+  <text x="42" y="91" fill="#688078" font-family="Microsoft YaHei, sans-serif" font-size="18">最简单、不能继续拆分且自由度为 0 的构件组</text>
+  <g transform="translate(75 122)" stroke="#285f56" stroke-width="12" stroke-linecap="round" fill="none">
+    <line x1="75" y1="185" x2="230" y2="75"/>
+    <line x1="230" y1="75" x2="385" y2="185"/>
+  </g>
+  <g fill="#fff" stroke="#173f3a" stroke-width="7">
+    <circle cx="150" cy="307" r="17"/><circle cx="305" cy="197" r="17"/><circle cx="460" cy="307" r="17"/>
+  </g>
+  <text x="101" y="350" fill="#8a5f40" font-family="Microsoft YaHei, sans-serif" font-size="20">外接副</text>
+  <text x="276" y="161" fill="#8a5f40" font-family="Microsoft YaHei, sans-serif" font-size="20">内接副</text>
+  <text x="421" y="350" fill="#8a5f40" font-family="Microsoft YaHei, sans-serif" font-size="20">外接副</text>
+  <g transform="translate(550 126)">
+    <rect width="284" height="210" rx="20" fill="#e8f0ec" stroke="#cbdcd5" stroke-width="3"/>
+    <text x="142" y="57" text-anchor="middle" fill="#173f3a" font-family="Microsoft YaHei, sans-serif" font-size="24">n = 2，Pₗ = 3</text>
+    <text x="142" y="108" text-anchor="middle" fill="#285f56" font-family="Georgia, serif" font-size="34" font-style="italic">F = 3n − 2Pₗ</text>
+    <line x1="47" y1="132" x2="237" y2="132" stroke="#9bb6ad" stroke-width="2"/>
+    <text x="142" y="176" text-anchor="middle" fill="#a76f43" font-family="Microsoft YaHei, sans-serif" font-size="31" font-weight="700">F = 0</text>
+  </g>
+</svg>

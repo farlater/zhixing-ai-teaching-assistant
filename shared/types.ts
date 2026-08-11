@@ -131,6 +131,7 @@ export interface Database {
   practices: Practice[]
   settings?: {
     demoShowcase?: boolean
+    demoSeedVersion?: number
     network?: {
       hotspotSsid: string
       hotspotPassword: string

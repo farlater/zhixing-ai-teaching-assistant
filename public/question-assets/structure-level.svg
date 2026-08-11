@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 440">
+  <rect width="900" height="440" rx="28" fill="#f3f7f5"/>
+  <text x="42" y="55" fill="#173f3a" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">按最高级别的基本杆组确定机构级别</text>
+  <g transform="translate(62 119)">
+    <rect x="0" y="95" width="190" height="112" rx="20" fill="#e9eee9" stroke="#cfd9d3" stroke-width="3"/>
+    <text x="95" y="139" text-anchor="middle" fill="#53665f" font-family="Microsoft YaHei, sans-serif" font-size="20">机架 + 原动件</text>
+    <text x="95" y="179" text-anchor="middle" fill="#173f3a" font-family="Microsoft YaHei, sans-serif" font-size="29" font-weight="700">Ⅰ级部分</text>
+    <path d="M198 151 H245" stroke="#879b94" stroke-width="7" marker-end="url(#arrow)"/>
+    <rect x="255" y="55" width="190" height="192" rx="20" fill="#e1efea" stroke="#80a99b" stroke-width="4"/>
+    <text x="350" y="98" text-anchor="middle" fill="#55736a" font-family="Microsoft YaHei, sans-serif" font-size="18">两件三副</text>
+    <polyline points="298,192 350,128 402,192" fill="none" stroke="#285f56" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+    <g fill="#fff" stroke="#173f3a" stroke-width="5"><circle cx="298" cy="192" r="12"/><circle cx="350" cy="128" r="12"/><circle cx="402" cy="192" r="12"/></g>
+    <text x="350" y="229" text-anchor="middle" fill="#285f56" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700">Ⅱ级组</text>
+    <path d="M453 151 H500" stroke="#879b94" stroke-width="7" marker-end="url(#arrow)"/>
+    <rect x="510" y="22" width="260" height="258" rx="20" fill="#f1e8df" stroke="#c9956f" stroke-width="4"/>
+    <text x="640" y="62" text-anchor="middle" fill="#805f47" font-family="Microsoft YaHei, sans-serif" font-size="18">四件六副 · 三个内接副</text>
+    <polygon points="590,188 640,98 700,188 640,219" fill="none" stroke="#a76f43" stroke-width="9" stroke-linejoin="round"/>
+    <line x1="640" y1="98" x2="640" y2="219" stroke="#a76f43" stroke-width="7"/>
+    <g fill="#fff" stroke="#805233" stroke-width="5"><circle cx="590" cy="188" r="11"/><circle cx="640" cy="98" r="11"/><circle cx="700" cy="188" r="11"/><circle cx="640" cy="219" r="11"/></g>
+    <text x="640" y="260" text-anchor="middle" fill="#a76f43" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700">Ⅲ级组</text>
+  </g>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#879b94"/></marker></defs>
+</svg>
