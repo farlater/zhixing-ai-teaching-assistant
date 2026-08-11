@@ -65,7 +65,7 @@ flowchart LR
 
 首次使用需要联网下载运行环境和依赖。以后双击桌面图标即可启动，不需要打开命令行。开始菜单同时提供“配置 AI 服务”“停止本地服务”和“卸载”入口。重新安装或升级时会保留原有 `data`、`uploads` 和 `.env`。
 
-GitHub Actions 的 `Build Windows installer` 工作流还会生成包含 Node 运行时和生产依赖的 `.exe` 一键安装包及便携版 ZIP。下载 `.exe` 后安装不再需要 Node.js 或 pnpm；便携版解压后双击“启动知行课堂.bat”即可。未签名的测试版可能显示 Windows SmartScreen 提示。
+GitHub Actions 的 `Build Windows installer` 工作流还会生成包含 Node 运行时和生产依赖的 `.exe` 一键安装包及便携版 ZIP。下载 `.exe` 后安装不再需要 Node.js 或 pnpm；便携版解压后双击 `Start-Zhixing.bat` 即可。未签名的测试版可能显示 Windows SmartScreen 提示。
 
 ### 学生端 Android APK
 

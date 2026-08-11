@@ -29,6 +29,14 @@ function Copy-ReleaseFiles {
   foreach ($launcher in @('启动知行课堂.bat', '停止知行课堂.bat', '配置AI服务.bat')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "runtime\$launcher") -Destination (Join-Path $packageRoot $launcher) -Force
   }
+  $portableAliases = @{
+    '启动知行课堂.bat' = 'Start-Zhixing.bat'
+    '停止知行课堂.bat' = 'Stop-Zhixing.bat'
+    '配置AI服务.bat' = 'Configure-AI.bat'
+  }
+  foreach ($entry in $portableAliases.GetEnumerator()) {
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot "runtime\$($entry.Key)") -Destination (Join-Path $packageRoot $entry.Value) -Force
+  }
 }
 
 function Install-ReleaseNode {
