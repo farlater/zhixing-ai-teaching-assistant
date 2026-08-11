@@ -224,13 +224,14 @@ public class MainActivity extends Activity {
         progressBar.setVisibility(View.GONE);
         if (errorDialogVisible || isFinishing()) return;
         errorDialogVisible = true;
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(R.string.connection_failed)
                 .setMessage(R.string.connection_failed_detail)
-                .setPositiveButton(R.string.retry, (dialog, which) -> openClassroom())
-                .setNeutralButton(R.string.connection_settings, (dialog, which) -> showServerDialog())
-                .setOnDismiss(dialog -> errorDialogVisible = false)
-                .show();
+                .setPositiveButton(R.string.retry, (clickedDialog, which) -> openClassroom())
+                .setNeutralButton(R.string.connection_settings, (clickedDialog, which) -> showServerDialog())
+                .create();
+        dialog.setOnDismissListener(ignored -> errorDialogVisible = false);
+        dialog.show();
     }
 
     private GradientDrawable roundedBackground(int color, int radiusDp) {
