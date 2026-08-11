@@ -1,4 +1,4 @@
-import type { Ability, ClassReport, Database, Submission } from '../shared/types.js'
+import type { Ability, ClassReport, Database, ReportDiagnosis, Submission } from '../shared/types.js'
 
 export function buildClassReport(db: Database, assessmentId: string): ClassReport | null {
   const assessment = db.assessments.find(item => item.id === assessmentId)
@@ -58,11 +58,20 @@ export function buildClassReport(db: Database, assessmentId: string): ClassRepor
     students.some(student => student.rate < 60) ? `为 ${students.filter(student => student.rate < 60).map(student => student.name).join('、')} 安排基础概念与公式回忆练习。` : '全班基础表现稳定，可以进入进阶变式。'
   ].filter(Boolean) : ['课堂尚未收到提交，发布检测后将自动形成教学建议。']
   const totalPossible = submissions.length * maxScore
+  const cachedDiagnosis = db.settings?.reportDiagnoses?.[assessmentId]
+  const diagnosis: ReportDiagnosis = cachedDiagnosis || {
+    summary: submissions.length
+      ? `已根据 ${submissions.length} 份作答形成统计。当前最需要关注“${weakest?.name || '待继续观察'}”，建议结合逐题正确率安排回讲。`
+      : '课堂尚未收到作答，暂时无法形成可靠的班级诊断。',
+    suggestions,
+    updatedAt: assessment.publishedAt || assessment.createdAt,
+    source: 'fallback'
+  }
 
   return {
     assessment, submittedCount: submissions.length, averageScore: Number(averageScore.toFixed(1)),
     accuracy: totalPossible ? Math.round(submissions.reduce((sum, submission) => sum + submission.totalScore, 0) / totalPossible * 100) : 0,
-    scoreDistribution, knowledgeMastery, questionStats, errorTypes, students, suggestions
+    scoreDistribution, knowledgeMastery, questionStats, errorTypes, students, suggestions: diagnosis.suggestions, diagnosis
   }
 }
 

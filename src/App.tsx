@@ -1,19 +1,18 @@
-import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { Spinner, TeacherLayout } from './components'
-
-const Landing = lazy(() => import('./pages/Landing'))
-const Dashboard = lazy(() => import('./pages/Dashboard'))
-const Courses = lazy(() => import('./pages/Courses'))
-const Questions = lazy(() => import('./pages/Questions'))
-const Classes = lazy(() => import('./pages/Classes'))
-const Reports = lazy(() => import('./pages/Reports'))
-const Students = lazy(() => import('./pages/Students'))
-const Assistant = lazy(() => import('./pages/Assistant'))
-const StudentApp = lazy(() => import('./pages/StudentApp'))
+import { TeacherLayout } from './components'
+import { ErrorBoundary } from './ErrorBoundary'
+import Landing from './pages/Landing'
+import Dashboard from './pages/Dashboard'
+import Courses from './pages/Courses'
+import Questions from './pages/Questions'
+import Classes from './pages/Classes'
+import Reports from './pages/Reports'
+import Students from './pages/Students'
+import Assistant from './pages/Assistant'
+import StudentApp from './pages/StudentApp'
 
 export default function App() {
-  return <Suspense fallback={<Spinner label="正在打开知行课堂" />}><Routes>
+  return <ErrorBoundary><Routes>
     <Route path="/" element={<Landing />} />
     <Route path="/teacher" element={<TeacherLayout />}>
       <Route index element={<Dashboard />} />
@@ -27,5 +26,5 @@ export default function App() {
     <Route path="/join" element={<StudentApp />} />
     <Route path="/join/:code" element={<StudentApp />} />
     <Route path="*" element={<Navigate to="/" replace />} />
-  </Routes></Suspense>
+  </Routes></ErrorBoundary>
 }

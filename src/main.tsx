@@ -6,7 +6,10 @@ import './styles.css'
 import 'katex/dist/katex.min.css'
 import { registerSW } from 'virtual:pwa-register'
 
-registerSW({ immediate: true })
+const updateSW = registerSW({
+  immediate: true,
+  onNeedRefresh() { void updateSW(true) }
+})
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode><BrowserRouter><App /></BrowserRouter></React.StrictMode>
