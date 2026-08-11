@@ -40,4 +40,7 @@ if (-not $running) {
 }
 
 if (-not $running) { throw "服务未能启动，请查看 $appRoot\data\logs\server-error.log" }
-if (-not $NoBrowser) { Start-Process $teacherUrl }
+if (-not $NoBrowser) {
+  $explorer = Join-Path $env:SystemRoot 'explorer.exe'
+  Start-Process -FilePath $explorer -ArgumentList @($teacherUrl)
+}
