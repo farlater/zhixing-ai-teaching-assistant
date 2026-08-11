@@ -1,7 +1,9 @@
 ﻿[CmdletBinding()]
-param([string]$InstallRoot = $PSScriptRoot)
+param([string]$InstallRoot = '')
 
 $ErrorActionPreference = 'Stop'
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+if ([string]::IsNullOrWhiteSpace($InstallRoot)) { $InstallRoot = $scriptRoot }
 $installRoot = [IO.Path]::GetFullPath($InstallRoot).TrimEnd('\')
 $localPrograms = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'Programs')).TrimEnd('\')
 if (-not $installRoot.StartsWith($localPrograms + '\', [StringComparison]::OrdinalIgnoreCase) -or $installRoot.Length -le $localPrograms.Length + 3) {

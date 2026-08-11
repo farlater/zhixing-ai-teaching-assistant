@@ -1,80 +1,34 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import type { AnswerResult, Database, Question, Student, Submission } from '../shared/types.js'
+import type { Database, Question } from '../shared/types.js'
 
 const DATA_DIR = path.resolve('data')
 const DB_PATH = path.join(DATA_DIR, 'db.json')
 
 const now = () => new Date().toISOString()
 
-const demoNames = [
-  '林浩然', '陈雨桐', '周子轩', '王若溪', '赵思远', '沈嘉禾', '李欣妍', '张宇航', '刘诗涵', '杨博文',
-  '黄可欣', '吴俊杰', '徐梦琪', '孙泽宇', '胡雅雯', '朱浩铭', '高语彤', '何景行', '郭依诺', '马睿哲',
-  '罗思琪', '梁嘉佑', '宋梓涵', '郑皓轩', '谢雨菲', '韩明宇', '唐佳宁', '冯奕辰', '董心悦', '萧承泽',
-  '程婉清', '曹昊天', '袁舒涵', '邓子墨', '许安然', '傅一鸣', '彭若琳', '曾星宇', '苏语嫣', '卢俊熙',
-  '蒋思源', '蔡佳琪', '魏景铄', '叶芷晴', '潘宇晨', '杜梦瑶', '戴梓睿', '夏可心', '钟皓然', '汪诗雅',
-  '田嘉树', '任欣怡', '姜明轩', '范雨萱', '石博雅', '陆泽言', '龚思涵', '邹奕帆', '白清越', '陈思远'
-]
-
-function demoDiagnosis(correct: boolean, question: Question, index: number) {
-  const isDirection = question.knowledgePointId.includes('direction')
-  const isStructure = question.knowledgePointId.includes('structure')
-  const errors = isStructure ? ['杆组识别错误', '拆分顺序错误', '机构级别判断错误', '自由度计算失误'] : ['概念混淆', '公式应用错误', '转向判断错误', '计算失误']
-  return {
-    summary: correct ? '判断准确，能够把机构简图与核心规律对应起来。' : '已经识别出题目中的主要构件，但关键判断仍有偏差。',
-    errorLocation: correct ? undefined : isStructure ? '基本杆组拆分或机构级别判定' : isDirection ? '首末轮转向判断' : '公式选择或参数代入',
-    errorReason: correct ? undefined : isStructure ? '没有先明确原动件，或未从传动路径远端开始拆分。' : isDirection ? '没有逐级传递箭头方向。' : '未先确定极位夹角或传动路线。',
-    errorType: correct ? undefined : errors[index % errors.length],
-    suggestion: correct ? '继续完成一道工程情境变式题。' : isStructure ? '先圈出原动件与机架，再从远端依次拆出基本杆组。' : '先在图上标出运动方向和已知量，再代入对应公式。',
-    relatedConcept: question.formula || (isStructure ? '基本杆组与机构结构分析' : '机构简图与运动关系'),
-    abilityScores: Object.fromEntries(question.abilities.map(ability => [ability, correct ? 90 + index % 8 : 48 + index % 18]))
-  }
-}
-
-function simulatedSubmission(studentId: string, assessmentId: string, questions: Question[], studentIndex: number, targetRates: number[], createdAt: string): Submission {
-  const answers: AnswerResult[] = questions.map((question, questionIndex) => {
-    const courseOffset = assessmentId.includes('gear') ? 11 : assessmentId.includes('structure') ? 23 : 3
-    const correct = ((studentIndex * 37 + questionIndex * 19 + courseOffset) % 100) < targetRates[questionIndex]
-    const wrongScore = [0, 4, 6][(studentIndex + questionIndex) % 3]
-    const answer = correct ? question.answer : ['A', 'B', 'D'].find(value => value !== question.answer) || 'A'
-    return { questionId: question.id, answer, score: correct ? question.maxScore : wrongScore, correct, diagnosis: demoDiagnosis(correct, question, studentIndex + questionIndex) }
-  })
-  return {
-    id: `submission-${assessmentId}-${studentId}`, assessmentId, studentId, answers,
-    totalScore: answers.reduce((sum, answer) => sum + answer.score, 0),
-    maxScore: questions.reduce((sum, question) => sum + question.maxScore, 0), status: 'completed', submittedAt: createdAt
-  }
-}
-
 function seed(): Database {
   const createdAt = now()
   const fourbarQuestions: Question[] = [
-    { id: 'q-fourbar-1', courseId: 'course-fourbar', knowledgePointId: 'kp-fourbar-k', type: 'single', difficulty: '基础', stem: '![曲柄摇杆机构极位示意图](/question-assets/fourbar-angle.svg)\n\n图示机构的极位夹角 $\\theta=30°$，其行程速比系数 $K$ 最接近下列哪一项？', options: ['1.00', '1.20', '1.40', '1.67'], answer: 'C', explanation: '$K=(180°+30°)/(180°-30°)=210/150=1.40$。', formula: 'K = (180° + θ) / (180° - θ)', maxScore: 10, abilities: ['公式掌握', '计算'], source: 'manual', status: 'confirmed', createdAt },
-    { id: 'q-fourbar-2', courseId: 'course-fourbar', knowledgePointId: 'kp-fourbar-judge', type: 'single', difficulty: '进阶', stem: '![对心与偏置曲柄滑块机构](/question-assets/fourbar-slider.svg)\n\n关于图中两种曲柄滑块机构的急回特性，判断正确的是？', options: ['Ⅰ无急回，Ⅱ有急回', 'Ⅰ有急回，Ⅱ无急回', '两者均有急回', '两者均无急回'], answer: 'A', explanation: '对心曲柄滑块机构 $θ=0°$，$K=1$；偏置后一般 $θ>0°$，具有急回特性。', formula: 'θ > 0° ⇒ K > 1', maxScore: 10, abilities: ['概念理解', '推理'], source: 'manual', status: 'confirmed', createdAt },
-    { id: 'q-fourbar-3', courseId: 'course-fourbar', knowledgePointId: 'kp-fourbar-extreme', type: 'single', difficulty: '进阶', stem: '![摆动导杆机构极限位置](/question-assets/fourbar-guide.svg)\n\n图示摆动导杆机构的摆角 $\\psi=40°$。若 $\\theta=\\psi$，行程速比系数 $K$ 约为？', options: ['1.29', '1.57', '1.80', '2.00'], answer: 'B', explanation: '$K=(180°+40°)/(180°-40°)=220/140≈1.57$。', formula: '摆动导杆机构中 θ = ψ', maxScore: 10, abilities: ['公式应用', '计算'], source: 'manual', status: 'confirmed', createdAt }
+    { id: 'q-fourbar-1', courseId: 'course-fourbar', knowledgePointId: 'kp-fourbar-k', type: 'single', difficulty: '基础', stem: '![插齿机急回机构（江苏大学机械原理样题）](/question-assets/source-fourbar-quick-return.png)\n\n图示插齿机构的行程速比系数 $K=1.5$，其极位夹角 $\\theta$ 为多少？', options: ['18°', '30°', '36°', '45°'], answer: 'C', explanation: '$\\theta=180°(K-1)/(K+1)=180°×0.5/2.5=36°$。题图取自江苏大学 803《机械原理》样题。', formula: 'θ = 180°(K−1)/(K+1)', maxScore: 10, abilities: ['公式掌握', '计算'], source: 'bank', status: 'confirmed', createdAt },
+    { id: 'q-fourbar-2', courseId: 'course-fourbar', knowledgePointId: 'kp-fourbar-extreme', type: 'single', difficulty: '进阶', stem: '![插齿机急回机构（江苏大学机械原理样题）](/question-assets/source-fourbar-quick-return.png)\n\n已知图中 $l_{AC}=200\\,\\text{mm}$、$K=1.5$。按摆动导杆机构的极位几何关系，曲柄 $AB$ 的长度最接近？', options: ['31.0 mm', '61.8 mm', '95.5 mm', '123.6 mm'], answer: 'B', explanation: '先得 $\\theta=36°$，再由 $l_{AB}=l_{AC}\\sin(\\theta/2)$，得 $200\\sin18°≈61.8\\,\\text{mm}$。题图取自江苏大学 803《机械原理》样题。', formula: 'lAB = lAC·sin(θ/2)', maxScore: 10, abilities: ['公式应用', '计算'], source: 'bank', status: 'confirmed', createdAt },
+    { id: 'q-fourbar-3', courseId: 'course-fourbar', knowledgePointId: 'kp-fourbar-judge', type: 'single', difficulty: '进阶', stem: '![插齿机急回机构（江苏大学机械原理样题）](/question-assets/source-fourbar-quick-return.png)\n\n图示机构 $K=1.5$，插刀行程 $H=60\\,\\text{mm}$。若扇形齿轮转过的角度等于摆角 $\\theta$，其节圆半径 $R$ 最接近？', options: ['47.7 mm', '60.0 mm', '95.5 mm', '120.0 mm'], answer: 'C', explanation: '$\\theta=36°=\\pi/5\\,\\text{rad}$，齿条行程 $H=R\\theta$，故 $R=60/(\\pi/5)≈95.5\\,\\text{mm}$。题图取自江苏大学 803《机械原理》样题。', formula: 'H = Rθ（θ 用弧度）', maxScore: 10, abilities: ['公式应用', '计算'], source: 'bank', status: 'confirmed', createdAt }
   ]
   const gearQuestions: Question[] = [
-    { id: 'q-gear-1', courseId: 'course-gear', knowledgePointId: 'kp-gear-ratio', type: 'single', difficulty: '进阶', stem: '![两级定轴轮系](/question-assets/gear-compound.svg)\n\n齿轮 2 与齿轮 3 同轴固定。图示轮系的传动比 $i_{14}=\\omega_1/\\omega_4$ 为多少？', options: ['3', '4', '6', '9'], answer: 'C', explanation: '$i_{14}=(z_2/z_1)(z_4/z_3)=(40/20)×(45/15)=6$。', formula: 'i₁₄ = (z₂z₄)/(z₁z₃)', maxScore: 10, abilities: ['公式应用', '计算'], source: 'manual', status: 'confirmed', createdAt },
-    { id: 'q-gear-2', courseId: 'course-gear', knowledgePointId: 'kp-gear-idler', type: 'single', difficulty: '基础', stem: '![含惰轮的定轴轮系](/question-assets/gear-idler.svg)\n\n图中齿轮 2 为惰轮。关于 $i_{13}$ 的大小和齿轮 1、3 的转向，正确的是？', options: ['$i_{13}=1.75$，转向相反', '$i_{13}=3$，转向相反', '$i_{13}=1.75$，转向相同', '$i_{13}=3$，转向相同'], answer: 'D', explanation: '惰轮齿数不影响总传动比大小，$i_{13}=z_3/z_1=60/20=3$；两次外啮合，首末轮转向相同。', formula: '惰轮只改变传递方向，不改变总传动比大小', maxScore: 10, abilities: ['概念理解', '推理'], source: 'manual', status: 'confirmed', createdAt },
-    { id: 'q-gear-3', courseId: 'course-gear', knowledgePointId: 'kp-gear-direction', type: 'single', difficulty: '进阶', stem: '![空间定轴轮系箭头法](/question-assets/gear-spatial.svg)\n\n判断空间定轴轮系首、末轮转向时，最稳妥的方法是？', options: ['只数外啮合次数', '沿传动路线逐级标注箭头', '只比较首末轮齿数', '统一按相反方向处理'], answer: 'B', explanation: '空间轮系各轴不平行，不能只用 $(-1)^m$；应使用箭头法逐级判断。', formula: '空间定轴轮系：箭头法', maxScore: 10, abilities: ['概念理解', '推理'], source: 'manual', status: 'confirmed', createdAt }
+    { id: 'q-gear-1', courseId: 'course-gear', knowledgePointId: 'kp-gear-ratio', type: 'single', difficulty: '基础', stem: '![含蜗杆的多级定轴轮系（江苏大学机械原理样题）](/question-assets/source-gear-train.png)\n\n图示轮系中各齿轮的回转轴线位置不随运动改变。该轮系按轴线位置应归为？', options: ['定轴轮系', '行星轮系', '差动轮系', '复合周转轮系'], answer: 'A', explanation: '定轴轮系的各齿轮回转轴线位置固定。题图取自江苏大学 803《机械原理》样题。', formula: '定轴轮系：各齿轮轴线位置固定', maxScore: 10, abilities: ['概念理解'], source: 'bank', status: 'confirmed', createdAt },
+    { id: 'q-gear-2', courseId: 'course-gear', knowledgePointId: 'kp-gear-direction', type: 'single', difficulty: '进阶', stem: '![含蜗杆的多级定轴轮系（江苏大学机械原理样题）](/question-assets/source-gear-train.png)\n\n图示传动同时包含左旋蜗杆和空间布置的多级齿轮。判断轴 $B$ 转向时，最可靠的方法是？', options: ['只数外啮合次数', '沿传动路线逐级用箭头判向', '只比较首末轮齿数', '默认与蜗杆转向相反'], answer: 'B', explanation: '空间轮系不能只用平面轮系的 $(-1)^m$。应先按左旋蜗杆啮合关系定出下一轮方向，再沿每一级传动逐级标注箭头。题图取自江苏大学 803《机械原理》样题。', formula: '空间定轴轮系：箭头法', maxScore: 10, abilities: ['概念理解', '推理'], source: 'bank', status: 'confirmed', createdAt },
+    { id: 'q-gear-3', courseId: 'course-gear', knowledgePointId: 'kp-gear-idler', type: 'single', difficulty: '进阶', stem: '![含蜗杆的多级定轴轮系（江苏大学机械原理样题）](/question-assets/source-gear-train.png)\n\n计算图示总传动比 $i_{AB}$ 时，正确的处理原则是？', options: ['分段写出各级传动比并连乘，同轴固联轮角速度相同', '把所有齿数直接相加', '只计算首末两个齿轮', '所有中间轮齿数一律忽略'], answer: 'A', explanation: '复杂定轴轮系应沿传动路线分级列式；同轴固联齿轮角速度相同，各级传动比连乘后再约去中间角速度。题图取自江苏大学 803《机械原理》样题。', formula: 'iAB = i12·i23·…·inB', maxScore: 10, abilities: ['公式应用', '推理'], source: 'bank', status: 'confirmed', createdAt }
   ]
   const structureQuestions: Question[] = [
-    { id: 'q-structure-1', courseId: 'course-structure', knowledgePointId: 'kp-structure-dyad', type: 'single', difficulty: '基础', stem: '![两件三副基本杆组](/question-assets/structure-dyad.svg)\n\n图示构件组有 $n=2$ 个活动构件、$P_L=3$ 个低副，且不能继续拆分。该基本杆组属于哪一级？', options: ['Ⅰ级组', 'Ⅱ级组', 'Ⅲ级组', 'Ⅳ级组'], answer: 'B', explanation: '$F=3n-2P_L=3×2-2×3=0$，两件三副的基本杆组为Ⅱ级组。', formula: 'F = 3n − 2Pₗ = 0', maxScore: 10, abilities: ['概念理解', '公式应用'], source: 'manual', status: 'confirmed', createdAt },
-    { id: 'q-structure-2', courseId: 'course-structure', knowledgePointId: 'kp-structure-level', type: 'single', difficulty: '基础', stem: '![机构级别按最高基本杆组确定](/question-assets/structure-level.svg)\n\n某平面机构除机架和原动件外，既含Ⅱ级组又含Ⅲ级组。该机构应判定为？', options: ['Ⅰ级机构', 'Ⅱ级机构', 'Ⅲ级机构', 'Ⅳ级机构'], answer: 'C', explanation: '平面机构的级别按机构中所含基本杆组的最高级别命名，因此为Ⅲ级机构。', formula: '机构级别 = 所含基本杆组的最高级别', maxScore: 10, abilities: ['概念理解', '推理'], source: 'manual', status: 'confirmed', createdAt },
-    { id: 'q-structure-3', courseId: 'course-structure', knowledgePointId: 'kp-structure-analysis', type: 'single', difficulty: '进阶', stem: '![同一机构采用不同原动件](/question-assets/structure-driver.svg)\n\n对图示双缸机构进行结构分析。分别以构件 AB、EG 为原动件时，机构级别的正确组合是？', options: ['AB：Ⅰ级；EG：Ⅱ级', 'AB：Ⅲ级；EG：Ⅱ级', '两种情况均为Ⅱ级', 'AB：Ⅱ级；EG：Ⅲ级'], answer: 'D', explanation: '以 AB 为原动件时可依次拆出Ⅱ级组，机构为Ⅱ级；以 EG 为原动件时拆分中出现Ⅲ级组，机构为Ⅲ级。', formula: '先明确原动件，再从传动路径远端拆组', maxScore: 10, abilities: ['推理', '表达'], source: 'manual', status: 'confirmed', createdAt }
+    { id: 'q-structure-1', courseId: 'course-structure', knowledgePointId: 'kp-structure-dyad', type: 'single', difficulty: '基础', stem: '![Ⅱ级基本杆组的五种形式（内蒙古农业大学课件）](/question-assets/source-structure-dyad-types.png)\n\n图中 a～e 五种杆组均由两个构件和三个低副组成。它们属于？', options: ['Ⅰ级组', 'Ⅱ级组', 'Ⅲ级组', 'Ⅳ级组'], answer: 'B', explanation: '$F=3n-2P_L=3×2-2×3=0$，由两个构件和三个低副组成的最简单基本杆组称为Ⅱ级组。题图取自内蒙古农业大学《平面机构的组成原理、分类与结构分析》课件。', formula: 'F = 3n − 2Pₗ = 0', maxScore: 10, abilities: ['概念理解', '公式应用'], source: 'bank', status: 'confirmed', createdAt },
+    { id: 'q-structure-2', courseId: 'course-structure', knowledgePointId: 'kp-structure-level', type: 'single', difficulty: '基础', stem: '![Ⅲ级基本杆组的典型形式（内蒙古农业大学课件）](/question-assets/source-structure-levels.png)\n\n图示三种基本杆组均由 4 个构件和 6 个低副组成，并含有一个具有 3 个低副的构件。该杆组属于？', options: ['Ⅰ级组', 'Ⅱ级组', 'Ⅲ级组', 'Ⅳ级组'], answer: 'C', explanation: '满足 $F=3×4-2×6=0$，且具有三副构件的这种四件六副基本杆组定义为Ⅲ级组。题图取自内蒙古农业大学课程课件。', formula: 'F = 3n − 2Pₗ = 0', maxScore: 10, abilities: ['概念理解', '公式应用'], source: 'bank', status: 'confirmed', createdAt },
+    { id: 'q-structure-3', courseId: 'course-structure', knowledgePointId: 'kp-structure-analysis', type: 'single', difficulty: '进阶', stem: '![破碎机杆组拆分过程（内蒙古农业大学课件）](/question-assets/source-structure-crusher.png)\n\n对图示破碎机进行结构分析。若取构件 1 为原动件，可依次拆出构件 5、4 和构件 2、3 两个Ⅱ级杆组；若改取构件 5 为原动件，只能拆出由构件 1～4 组成的Ⅲ级杆组。两种情况下机构级别分别为？', options: ['Ⅰ级、Ⅱ级', 'Ⅱ级、Ⅱ级', 'Ⅱ级、Ⅲ级', 'Ⅲ级、Ⅱ级'], answer: 'C', explanation: '机构级别由拆出的最高级别基本杆组决定，因此构件1为原动件时是Ⅱ级机构，构件5为原动件时是Ⅲ级机构。题图取自内蒙古农业大学课程课件。', formula: '机构级别 = 所含最高级基本杆组级别', maxScore: 10, abilities: ['推理', '表达'], source: 'bank', status: 'confirmed', createdAt }
   ]
-  const students: Student[] = demoNames.map((name, index) => ({ id: index === 59 ? 'demo-live-student' : `demo-student-${String(index + 1).padStart(2, '0')}`, name, className: '23级机械设计1班', studentNo: `2023${String(index + 1).padStart(3, '0')}`, createdAt }))
-  const submissions = students.flatMap((student, index) => [
-    simulatedSubmission(student.id, 'assessment-fourbar', fourbarQuestions, index, [82, 68, 74], createdAt),
-    simulatedSubmission(student.id, 'assessment-gear', gearQuestions, index, [76, 71, 63], createdAt),
-    simulatedSubmission(student.id, 'assessment-structure', structureQuestions, index, [84, 73, 61], createdAt)
-  ])
-
   return {
     courses: [
-      { id: 'course-fourbar', name: '平面四杆机构的急回特性', subject: '机械原理', grade: '高职机械类', description: '判断机构是否具有急回特性，确定极位夹角并计算行程速比系数。', color: '#275d56', createdAt },
-      { id: 'course-gear', name: '定轴轮系的传动比', subject: '机械原理', grade: '高职机械类', description: '计算定轴轮系传动比，并使用箭头法判断首末轮转向。', color: '#9b6b46', createdAt },
-      { id: 'course-structure', name: '平面机构的组成与结构分析', subject: '机械原理', grade: '高职机械类', description: '识别基本杆组，判断机构级别，并完成平面机构的结构分析。', color: '#6a5b8b', createdAt }
+      { id: 'course-fourbar', name: '平面四杆机构的急回特性', subject: '机械原理', grade: '大学机械类', description: '判断机构是否具有急回特性，确定极位夹角并计算行程速比系数。', color: '#0969da', createdAt },
+      { id: 'course-gear', name: '定轴轮系的传动比', subject: '机械原理', grade: '大学机械类', description: '计算定轴轮系传动比，并使用箭头法判断首末轮转向。', color: '#8250df', createdAt },
+      { id: 'course-structure', name: '平面机构的组成与结构分析', subject: '机械原理', grade: '大学机械类', description: '识别基本杆组，判断机构级别，并完成平面机构的结构分析。', color: '#1a7f37', createdAt }
     ],
     knowledgePoints: [
       { id: 'kp-fourbar-extreme', courseId: 'course-fourbar', name: '极位与极位夹角', description: '从动件位于两个极限位置时确定主动曲柄之间的锐角。', formula: '极位夹角 θ', createdAt },
@@ -94,13 +48,37 @@ function seed(): Database {
     ],
     questions: [...fourbarQuestions, ...gearQuestions, ...structureQuestions],
     assessments: [
-      { id: 'assessment-fourbar', courseId: 'course-fourbar', title: '急回特性 · 课堂即时诊断', description: '3 道图示题，检测极位夹角、行程速比系数与机构判断。', joinCode: 'JH083', questionIds: fourbarQuestions.map(question => question.id), status: 'published', timeLimit: 6, publishedAt: createdAt, createdAt },
-      { id: 'assessment-gear', courseId: 'course-gear', title: '定轴轮系 · 课堂即时诊断', description: '3 道图示题，检测传动比计算、惰轮作用与转向判断。', joinCode: 'LX112', questionIds: gearQuestions.map(question => question.id), status: 'published', timeLimit: 6, publishedAt: createdAt, createdAt },
+      { id: 'assessment-fourbar', courseId: 'course-fourbar', title: '急回特性 · 课堂即时诊断', description: '3 道图示题，检测极位夹角、行程速比系数与机构判断。', joinCode: 'JH083', questionIds: fourbarQuestions.map(question => question.id), status: 'closed', timeLimit: 6, createdAt },
+      { id: 'assessment-gear', courseId: 'course-gear', title: '定轴轮系 · 课堂即时诊断', description: '3 道图示题，检测传动比计算、惰轮作用与转向判断。', joinCode: 'LX112', questionIds: gearQuestions.map(question => question.id), status: 'closed', timeLimit: 6, createdAt },
       { id: 'assessment-structure', courseId: 'course-structure', title: '平面机构结构分析 · 课堂即时诊断', description: '3 道图示题，检测基本杆组、机构级别与拆组分析。', joinCode: 'JG027', questionIds: structureQuestions.map(question => question.id), status: 'published', timeLimit: 6, publishedAt: createdAt, createdAt }
     ],
-    students, submissions, practices: [],
-    settings: { demoShowcase: true, demoSeedVersion: 2, network: { hotspotSsid: 'AI-Classroom', hotspotPassword: '12345678', preferredAddress: '' } }
+    students: [], submissions: [], practices: [],
+    settings: { demoShowcase: false, demoSeedVersion: 4, network: { hotspotSsid: 'AI-Classroom', hotspotPassword: '12345678', preferredAddress: '' } }
   }
+}
+
+function removeLegacyShowcaseData(db: Database) {
+  const legacyStudentIds = new Set(db.students.filter(student => student.id === 'demo-live-student' || student.id.startsWith('demo-student-')).map(student => student.id))
+  db.students = db.students.filter(student => !legacyStudentIds.has(student.id))
+  db.submissions = db.submissions.filter(submission => !legacyStudentIds.has(submission.studentId))
+  db.practices = db.practices.filter(practice => !legacyStudentIds.has(practice.studentId))
+  db.courses = db.courses.map(course => ({ ...course, grade: course.grade === '高职机械类' ? '大学机械类' : course.grade }))
+  const published = db.assessments.filter(assessment => assessment.status === 'published')
+  if (published.length > 1) {
+    const current = db.assessments.find(assessment => assessment.id === 'assessment-structure') || published[0]
+    db.assessments.forEach(assessment => {
+      if (assessment.status === 'published' && assessment.id !== current.id) assessment.status = 'closed'
+    })
+  }
+  if ((db.settings?.demoSeedVersion || 0) < 4) {
+    const curated = seed()
+    curated.questions.forEach(question => {
+      const current = db.questions.find(item => item.id === question.id)
+      if (current) Object.assign(current, question)
+      else db.questions.push(question)
+    })
+  }
+  db.settings = { ...db.settings, demoShowcase: false, demoSeedVersion: 4 }
 }
 
 export class JsonStore {
@@ -111,8 +89,8 @@ export class JsonStore {
     if (fs.existsSync(DB_PATH)) {
       try {
         this.data = JSON.parse(fs.readFileSync(DB_PATH, 'utf8')) as Database
-        if (!this.data.settings?.demoShowcase || this.data.settings.demoSeedVersion !== 2) {
-          this.data = seed()
+        if ((this.data.settings?.demoSeedVersion || 0) < 4 || this.data.settings?.demoShowcase) {
+          removeLegacyShowcaseData(this.data)
           this.save()
         }
       } catch {

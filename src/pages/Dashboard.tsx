@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowRight, BookOpen, CheckCircle2, ClipboardCheck, Clock3, Sparkles, Users } from 'lucide-react'
+import { ArrowRight, BookOpen, CheckCircle2, ClipboardCheck, Clock3, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { api, formatDate } from '../api'
 import { Spinner } from '../components'
@@ -18,14 +18,14 @@ export default function Dashboard() {
   if (!data) return <Spinner label="正在汇总课堂数据" />
   const stats = [
     { label: '课程', value: data.courses, note: '已建立课程空间', icon: BookOpen, tone: 'green' },
-    { label: '进行中课堂', value: data.activeClasses, note: '学生端可选择进入', icon: ClipboardCheck, tone: 'orange' },
+    { label: '进行中课堂', value: data.activeClasses, note: '学生端直接进入', icon: ClipboardCheck, tone: 'orange' },
     { label: '学生档案', value: data.students, note: '长期学习记录', icon: Users, tone: 'blue' },
     { label: '今日提交', value: data.submissionsToday, note: '份诊断结果已形成', icon: CheckCircle2, tone: 'violet' }
   ]
   return <>
     <section className="hero-card">
-      <div><span className="eyebrow"><Sparkles size={14} />今日教学提示</span><h2>先看见问题，再决定下一步。</h2><p>示例课堂已有完整作答数据，可直接进入学情报告查看班级共性问题。</p><div className="hero-actions"><Link className="btn primary" to="/teacher/reports">查看课堂报告 <ArrowRight size={17} /></Link><Link className="btn subtle" to="/teacher/questions">创建新检测</Link></div></div>
-      <div className="hero-visual"><div className="orbit one" /><div className="orbit two" /><div className="hero-score"><strong>83%</strong><span>班级掌握度</span><small>基于 6 份真实作答</small></div></div>
+      <div><span className="eyebrow">教学工作台</span><h2>从真实作答形成课堂诊断</h2><p>发布检测后，学生提交、逐题诊断和班级统计会在这里持续更新。</p><div className="hero-actions"><Link className="btn primary" to="/teacher/classes">管理课堂 <ArrowRight size={17} /></Link><Link className="btn subtle" to="/teacher/questions">生成题目</Link></div></div>
+      <div className="hero-visual"><div className="hero-score"><strong>{data.submissionsToday}</strong><span>今日提交</span><small>来自实际作答</small></div></div>
     </section>
     <section className="stat-grid">{stats.map(({ label, value, note, icon: Icon, tone }) => <div className="stat-card" key={label}><div className={`stat-icon ${tone}`}><Icon size={20} /></div><div><p>{label}</p><strong>{value}</strong><span>{note}</span></div></div>)}</section>
     <section className="dashboard-grid">
@@ -36,6 +36,6 @@ export default function Dashboard() {
         <div className="course-progress">{data.courseProgress.map(course => { const total = Math.min(100, course.knowledgeCount * 15 + course.materialCount * 20 + course.questionCount * 5); return <div key={course.id}><div className="progress-title"><span><b>{course.name}</b><small>{course.grade} · {course.subject}</small></span><strong>{total}%</strong></div><div className="progress"><i style={{ width: `${total}%` }} /></div><div className="progress-meta"><span>{course.knowledgeCount} 个知识点</span><span>{course.materialCount} 份资料</span><span>{course.questionCount} 道题</span></div></div>})}</div>
       </div>
     </section>
-    <section className="service-strip"><div><span className={`status-dot ${health?.mode === 'ai' ? '' : 'demo'}`} /><div><strong>{health?.mode === 'ai' ? '百炼 AI 服务已连接' : '当前为演示模式'}</strong><small>{health?.mode === 'ai' ? 'DeepSeek、千问视觉与语音已就绪' : '配置一个百炼 API Key 后启用全部模型；核心流程仍可体验'}</small></div></div><span><Clock3 size={15} /> 本地数据自动保存</span></section>
+    <section className="service-strip"><div><span className={`status-dot ${health?.mode === 'ai' ? '' : 'demo'}`} /><div><strong>{health?.mode === 'ai' ? 'AI 服务已连接' : 'AI 服务尚未配置'}</strong></div></div><span><Clock3 size={15} />数据保存在教师电脑</span></section>
   </>
 }

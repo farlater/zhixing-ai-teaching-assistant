@@ -31,6 +31,10 @@ export function syncKnowledgeBase(db: Database, courseId?: string) {
   const courses = db.courses.filter(course => !courseId || course.id === courseId)
   for (const course of courses) {
     const base = path.join(ROOT, safe(course.id))
+    const resolvedBase = path.resolve(base)
+    const resolvedRoot = path.resolve(ROOT)
+    if (!resolvedBase.startsWith(`${resolvedRoot}${path.sep}`)) throw new Error('知识文件目录不安全')
+    fs.rmSync(resolvedBase, { recursive: true, force: true })
     const manifest: ManifestEntry[] = []
     const add = (relative: string, title: string, kind: ManifestEntry['kind'], content: string, extra: Partial<ManifestEntry> = {}) => {
       writeAtomic(path.join(base, relative), content)

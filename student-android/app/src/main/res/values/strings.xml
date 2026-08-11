@@ -8,6 +8,14 @@
     <string name="save_and_connect">保存并连接</string>
     <string name="cancel">取消</string>
     <string name="connection_failed">无法连接教师电脑</string>
-    <string name="connection_failed_detail">请确认手机已经连接教师热点，并检查教师电脑地址和防火墙设置。</string>
+    <string name="connection_failed_detail">请确认手机已在系统 Wi-Fi 设置中连接教师电脑热点，再返回首页重新扫描课堂二维码。课堂二维码会自动填写教师电脑地址、端口和当前检测。</string>
     <string name="retry">重新连接</string>
+    <string name="scan_title">扫码加入课堂</string>
+    <string name="scan_hint">请先在手机 Wi-Fi 设置中连接教师电脑热点，再扫描教师端显示的课堂二维码。</string>
+    <string name="scan_classroom">扫码加入课堂</string>
+    <string name="scan_prompt">将课堂二维码放入框内</string>
+    <string name="open_recent_classroom">进入上次课堂</string>
+    <string name="manual_connection">手动输入地址</string>
+    <string name="invalid_qr">不是课堂二维码</string>
+    <string name="invalid_qr_detail">请扫描教师端“学生扫码入课”窗口中的二维码。</string>
 </resources>

@@ -33,21 +33,21 @@ test('主观题演示评分始终限制在合法分值内', () => {
   assert.ok(result.score >= 0 && result.score <= question.maxScore)
 })
 
-test('示例数据能生成班级报告和学生画像', () => {
+test('初始数据不包含虚构学生或作答', () => {
   const db = store.reset()
   const report = buildClassReport(db, 'assessment-fourbar')
   const structureReport = buildClassReport(db, 'assessment-structure')
-  const profile = buildStudentProfile(db, 'demo-student-01')
   assert.equal(db.courses.length, 3)
   assert.equal(db.questions.length, 9)
-  assert.equal(db.submissions.length, 180)
-  assert.equal(report?.submittedCount, 60)
+  assert.equal(db.students.length, 0)
+  assert.equal(db.submissions.length, 0)
+  assert.equal(report?.submittedCount, 0)
   assert.equal(report?.questionStats.length, 3)
-  assert.equal(structureReport?.submittedCount, 60)
+  assert.equal(structureReport?.submittedCount, 0)
   assert.equal(structureReport?.questionStats.length, 3)
   assert.ok((report?.knowledgeMastery.length || 0) >= 3)
-  assert.equal(profile?.student.name, '林浩然')
-  assert.ok((profile?.mastery.length || 0) >= 1)
+  assert.equal(buildStudentProfile(db, 'demo-student-01'), null)
+  assert.equal(db.assessments.filter(item => item.status === 'published').length, 1)
 })
 
 test('课堂数据能生成目录化知识文件并按问题检索', () => {
@@ -55,10 +55,10 @@ test('课堂数据能生成目录化知识文件并按问题检索', () => {
   syncKnowledgeBase(db, 'course-fourbar')
   const base = path.resolve('data', 'knowledge', 'course-fourbar')
   assert.ok(fs.existsSync(path.join(base, '00-course.md')))
-  assert.ok(fs.existsSync(path.join(base, '04-classrooms', 'assessment-fourbar', 'submissions', 'demo-student-01.md')))
-  const context = buildRetrievedContext(db, '林浩然这节课表现如何', 'course-fourbar', 'assessment-fourbar')
+  assert.equal(fs.existsSync(path.join(base, '04-classrooms', 'assessment-fourbar', 'submissions', 'demo-student-01.md')), false)
+  const context = buildRetrievedContext(db, '这节课的行程速比系数公式是什么', 'course-fourbar', 'assessment-fourbar')
   assert.match(context, /来源：course-fourbar\//)
-  assert.match(context, /林浩然/)
+  assert.match(context, /K=\(180°\+θ\)\/\(180°-θ\)/)
 })
 
 test('图片识别使用百炼视觉并返回 Token 用量', async () => {

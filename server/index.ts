@@ -30,6 +30,29 @@ const upload = multer({
   limits: { fileSize: 200 * 1024 * 1024 }
 })
 
+const aiConfigKeys = ['DASHSCOPE_API_KEY', 'MINERU_API_TOKEN', 'BAILIAN_BASE_URL', 'BAILIAN_TEXT_MODEL', 'BAILIAN_VISION_MODEL', 'BAILIAN_ASR_MODEL'] as const
+
+function saveAiConfig(values: Record<string, string>) {
+  const envPath = path.resolve('.env')
+  const existing = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8').split(/\r?\n/) : []
+  const next = new Map<string, string>()
+  for (const line of existing) {
+    const match = line.match(/^\s*([A-Z0-9_]+)=(.*)$/)
+    if (match) next.set(match[1], match[2])
+  }
+  for (const key of aiConfigKeys) {
+    const value = String(values[key] || '').replace(/[\r\n]/g, '').trim()
+    if (value) {
+      next.set(key, value)
+      process.env[key] = value
+    }
+  }
+  const known = new Set(aiConfigKeys)
+  const preserved = existing.filter(line => !line.match(/^\s*([A-Z0-9_]+)=/) || !known.has(line.match(/^\s*([A-Z0-9_]+)=/)?.[1] as typeof aiConfigKeys[number]))
+  const configured = aiConfigKeys.map(key => `${key}=${next.get(key) || ''}`)
+  fs.writeFileSync(envPath, [...preserved.filter((line, index, array) => line || (index > 0 && array[index - 1])), ...configured, ''].join('\n'), 'utf8')
+}
+
 app.use(cors())
 app.use(express.json({ limit: '4mb' }))
 app.use('/uploads', express.static(uploadDir))
@@ -43,6 +66,24 @@ app.get('/api/health', (_req, res) => {
     models: { text: process.env.BAILIAN_TEXT_MODEL || 'deepseek-v4-flash', vision: process.env.BAILIAN_VISION_MODEL || 'qwen3-vl-flash', speech: process.env.BAILIAN_ASR_MODEL || 'qwen3-asr-flash', document: process.env.MINERU_MODEL_VERSION || 'vlm' },
     addresses: lanAddresses(port)
   })
+})
+
+app.get('/api/settings/ai', (req, res) => {
+  if (!isLoopback(req.socket.remoteAddress)) return res.status(403).json({ error: 'AI 配置只允许在教师电脑本机修改' })
+  res.json({
+    bailianConfigured: Boolean(process.env.DASHSCOPE_API_KEY),
+    mineruConfigured: Boolean(process.env.MINERU_API_TOKEN),
+    baseUrl: process.env.BAILIAN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    textModel: process.env.BAILIAN_TEXT_MODEL || 'deepseek-v4-flash',
+    visionModel: process.env.BAILIAN_VISION_MODEL || 'qwen3-vl-flash',
+    asrModel: process.env.BAILIAN_ASR_MODEL || 'qwen3-asr-flash'
+  })
+})
+
+app.patch('/api/settings/ai', (req, res) => {
+  if (!isLoopback(req.socket.remoteAddress)) return res.status(403).json({ error: 'AI 配置只允许在教师电脑本机修改' })
+  saveAiConfig(req.body || {})
+  res.json({ ok: true, bailianConfigured: Boolean(process.env.DASHSCOPE_API_KEY), mineruConfigured: Boolean(process.env.MINERU_API_TOKEN) })
 })
 
 app.get('/api/network', (_req, res) => {
@@ -351,7 +392,7 @@ app.get('/api/classrooms/available', (_req, res) => {
 
 app.get('/api/classrooms/assessment/:id', (req, res) => {
   const assessment = store.read().assessments.find(item => item.id === req.params.id && item.status === 'published')
-  if (!assessment) return res.status(404).json({ error: '未找到这节演示课程' })
+  if (!assessment) return res.status(404).json({ error: '未找到当前课堂' })
   res.json(classroomView(assessment))
 })
 
@@ -383,18 +424,6 @@ app.post('/api/students/join', (req, res) => {
   const name = String(req.body.name || '').trim()
   if (!name) return res.status(400).json({ error: '请输入姓名' })
   const db = store.read()
-  if (db.settings?.demoShowcase) {
-    let demoStudent: Student | undefined
-    store.update(data => {
-      const reserved = data.students.find(item => item.id === 'demo-live-student')
-      if (!reserved) return
-      reserved.name = name
-      reserved.className = String(req.body.className || '23级机械设计1班')
-      reserved.studentNo = String(req.body.studentNo || reserved.studentNo || '')
-      demoStudent = { ...reserved }
-    })
-    if (demoStudent) return res.json(demoStudent)
-  }
   let student = db.students.find(item => item.name === name && item.className === (req.body.className || '临时课堂'))
   if (!student) {
     student = { id: id('student'), name, studentNo: req.body.studentNo || '', className: req.body.className || '临时课堂', createdAt: now() }
