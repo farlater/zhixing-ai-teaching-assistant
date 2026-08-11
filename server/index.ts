@@ -3,15 +3,16 @@ import cors from 'cors'
 import multer from 'multer'
 import path from 'node:path'
 import fs from 'node:fs'
-import os from 'node:os'
 import { store } from './store.js'
 import { asyncRoute, id, loadEnv, now } from './utils.js'
 import { extractMaterial } from './materials.js'
-import { generateQuestions, gradeSubjective, extractAnswerFromImage, teacherAssistant } from './ai.js'
+import { generateQuestions, gradeSubjective, extractAnswerFromImage, teacherAssistant, describeInstructionalImage, bailianReady } from './ai.js'
 import { programGrade } from './grading.js'
 import { buildClassReport, buildStudentProfile } from './reports.js'
 import { questionBank } from './questionBank.js'
-import { transcribePcm } from './speech.js'
+import { transcribeAudio } from './speech.js'
+import { buildRetrievedContext, knowledgeRoot, syncKnowledgeBase } from './knowledgeBase.js'
+import { isLoopback, lanAddresses, openWindowsHotspotSettings } from './network.js'
 import type { Assessment, Course, GenerateConfig, KnowledgePoint, Material, Question, Student, Submission } from '../shared/types.js'
 
 loadEnv()
@@ -25,7 +26,7 @@ const upload = multer({
     destination: uploadDir,
     filename: (_req, file, callback) => callback(null, `${Date.now()}-${id('file')}${path.extname(file.originalname)}`)
   }),
-  limits: { fileSize: 20 * 1024 * 1024 }
+  limits: { fileSize: 40 * 1024 * 1024 }
 })
 
 app.use(cors())
@@ -33,12 +34,31 @@ app.use(express.json({ limit: '4mb' }))
 app.use('/uploads', express.static(uploadDir))
 
 app.get('/api/health', (_req, res) => {
-  const networks = Object.values(os.networkInterfaces()).flat().filter(item => item?.family === 'IPv4' && !item.internal).map(item => item?.address)
+  const connected = bailianReady()
   res.json({
-    ok: true, mode: process.env.DEEPSEEK_API_KEY ? 'ai' : 'demo',
-    providers: { deepseek: Boolean(process.env.DEEPSEEK_API_KEY), zhipuVision: Boolean(process.env.ZHIPU_API_KEY), xfyun: Boolean(process.env.XFYUN_APP_ID) },
-    addresses: networks.map(address => `http://${address}:${port}`)
+    ok: true, mode: connected ? 'ai' : 'demo',
+    providers: { bailian: connected, text: connected, vision: connected, speech: connected },
+    models: { text: process.env.BAILIAN_TEXT_MODEL || 'deepseek-v4-flash', vision: process.env.BAILIAN_VISION_MODEL || 'qwen3-vl-flash', speech: process.env.BAILIAN_ASR_MODEL || 'qwen3-asr-flash' },
+    addresses: lanAddresses(port)
   })
+})
+
+app.get('/api/network', (_req, res) => {
+  const settings = store.read().settings?.network || { hotspotSsid: '', hotspotPassword: '' }
+  const addresses = lanAddresses(port)
+  res.json({ ...settings, addresses, preferredAddress: settings.preferredAddress || addresses[0] || `http://localhost:${port}`, studentPath: '/join' })
+})
+
+app.patch('/api/network', (req, res) => {
+  const network = { hotspotSsid: String(req.body.hotspotSsid || '').trim(), hotspotPassword: String(req.body.hotspotPassword || ''), preferredAddress: String(req.body.preferredAddress || '') }
+  store.update(db => { db.settings = { ...db.settings, network } })
+  res.json(network)
+})
+
+app.post('/api/network/open-hotspot-settings', (req, res) => {
+  if (!isLoopback(req.socket.remoteAddress)) return res.status(403).json({ error: '只能在教师电脑本机打开系统设置' })
+  openWindowsHotspotSettings()
+  res.json({ ok: true })
 })
 
 app.get('/api/overview', (_req, res) => {
@@ -105,14 +125,40 @@ app.post('/api/courses/:courseId/materials', upload.single('file'), asyncRoute(a
   if (!req.file) return res.status(400).json({ error: '请选择文件' })
   let originalName = req.file.originalname
   try { originalName = Buffer.from(originalName, 'latin1').toString('utf8') } catch { /* keep original */ }
+  const materialId = id('material')
   let text = ''
+  let imageUrls: string[] = []
+  let extractionNotes: string[] = []
+  let pageCount: number | undefined
   let status: Material['status'] = 'ready'
-  try { text = await extractMaterial(req.file.path, req.file.mimetype, originalName) } catch { status = 'failed' }
+  try {
+    const publicBase = `/uploads/materials/${materialId}`
+    const extracted = await extractMaterial(req.file.path, req.file.mimetype, originalName, path.join(uploadDir, 'materials', materialId), publicBase)
+    text = extracted.text; imageUrls = extracted.assets.map(item => item.publicUrl); extractionNotes = extracted.notes; pageCount = extracted.pageCount
+    const extension = path.extname(originalName).toLowerCase()
+    const visionMode = (process.env.MATERIAL_VISION_MODE || 'smart').toLowerCase()
+    const visionLimit = Math.max(1, Number(process.env.MATERIAL_VISION_MAX_IMAGES || 4))
+    const isStandaloneImage = req.file.mimetype.startsWith('image/')
+    const isScannedPdf = extension === '.pdf' && text.trim().length < 500
+    const isSparseOffice = ['.pptx', '.docx'].includes(extension) && text.trim().length < 250
+    const shouldReadImages = Boolean(extracted.assets.length) && visionMode !== 'off' && (visionMode === 'full' || isStandaloneImage || isScannedPdf || isSparseOffice)
+    if (shouldReadImages && bailianReady()) {
+      const descriptions: string[] = []
+      for (const [index, asset] of extracted.assets.slice(0, visionLimit).entries()) {
+        const description = await describeInstructionalImage(asset.filePath, asset.mimeType)
+        if (description) descriptions.push(`## 视觉提取 ${index + 1}\n\n${description}`)
+      }
+      if (descriptions.length) text = `${text}\n\n# 图片与扫描页识别\n\n${descriptions.join('\n\n')}`.slice(0, 180000)
+      if (extracted.assets.length > visionLimit) extractionNotes.push(`共发现 ${extracted.assets.length} 张图，本次视觉识别前 ${visionLimit} 张以控制 Token；可调整 MATERIAL_VISION_MAX_IMAGES。`)
+    } else if (shouldReadImages) extractionNotes.push('尚未配置百炼 API，图片已提取保存，配置后重新上传即可识别。')
+    else if (extracted.assets.length && visionMode === 'smart') extractionNotes.push(`智能节省模式：已提取 ${extracted.assets.length} 张页面/插图，但正文信息充足，未自动调用视觉模型。`)
+  } catch (error) { status = 'failed'; extractionNotes = [error instanceof Error ? error.message : '资料解析失败'] }
   const material: Material = {
-    id: id('material'), courseId: req.params.courseId, name: originalName, type: req.file.mimetype, size: req.file.size,
-    extractedText: text, path: `/uploads/${req.file.filename}`, status, createdAt: now()
+    id: materialId, courseId: req.params.courseId, name: originalName, type: req.file.mimetype, size: req.file.size,
+    extractedText: text, path: `/uploads/${req.file.filename}`, imageUrls, extractionNotes, pageCount, status, createdAt: now()
   }
   store.update(db => db.materials.push(material))
+  syncKnowledgeBase(store.read(), material.courseId)
   res.status(201).json(material)
 }))
 
@@ -123,7 +169,11 @@ app.delete('/api/materials/:id', (req, res) => {
     const filePath = path.join(uploadDir, path.basename(material.path))
     if (fs.existsSync(filePath) && path.dirname(filePath) === uploadDir) fs.unlinkSync(filePath)
   }
+  const assetDir = path.resolve(uploadDir, 'materials', req.params.id)
+  const materialRoot = path.resolve(uploadDir, 'materials')
+  if (assetDir.startsWith(`${materialRoot}${path.sep}`) && fs.existsSync(assetDir)) fs.rmSync(assetDir, { recursive: true, force: true })
   store.update(data => { data.materials = data.materials.filter(item => item.id !== req.params.id) })
+  if (material) syncKnowledgeBase(store.read(), material.courseId)
   res.status(204).end()
 })
 
@@ -189,7 +239,10 @@ app.post('/api/assessments/:id/publish', (req, res) => {
   let assessment: Assessment | undefined
   store.update(db => {
     assessment = db.assessments.find(item => item.id === req.params.id)
-    if (assessment) { assessment.status = 'published'; assessment.publishedAt = now() }
+    if (assessment) {
+      db.assessments.forEach(item => { if (item.status === 'published' && item.id !== req.params.id) item.status = 'closed' })
+      assessment.status = 'published'; assessment.publishedAt = now()
+    }
   })
   if (!assessment) return res.status(404).json({ error: '课堂不存在' })
   res.json(assessment)
@@ -206,6 +259,18 @@ app.get('/api/classrooms/:code', (req, res) => {
   const db = store.read()
   const assessment = db.assessments.find(item => item.joinCode.toUpperCase() === req.params.code.toUpperCase() && item.status === 'published')
   if (!assessment) return res.status(404).json({ error: '未找到正在进行的课堂，请检查课堂码' })
+  const course = db.courses.find(item => item.id === assessment.courseId)
+  const questions = assessment.questionIds.map(questionId => db.questions.find(item => item.id === questionId)).filter(Boolean).map(question => {
+    const { answer: _answer, explanation: _explanation, rubric: _rubric, ...safeQuestion } = question as Question
+    return safeQuestion
+  })
+  res.json({ assessment, course, questions, submittedCount: db.submissions.filter(item => item.assessmentId === assessment.id).length })
+})
+
+app.get('/api/classrooms/active/current', (_req, res) => {
+  const db = store.read()
+  const assessment = db.assessments.find(item => item.status === 'published')
+  if (!assessment) return res.status(404).json({ error: '教师尚未发布检测' })
   const course = db.courses.find(item => item.id === assessment.courseId)
   const questions = assessment.questionIds.map(questionId => db.questions.find(item => item.id === questionId)).filter(Boolean).map(question => {
     const { answer: _answer, explanation: _explanation, rubric: _rubric, ...safeQuestion } = question as Question
@@ -252,6 +317,7 @@ app.post('/api/submissions', asyncRoute(async (req, res) => {
     data.submissions = data.submissions.filter(item => !(item.assessmentId === assessmentId && item.studentId === studentId))
     data.submissions.push(submission)
   })
+  syncKnowledgeBase(store.read(), assessment.courseId)
   res.status(201).json({ ...submission, questions: assessment.questionIds.map(questionId => db.questions.find(item => item.id === questionId)).filter(Boolean) })
 }))
 
@@ -294,21 +360,33 @@ app.post('/api/assistant/chat', asyncRoute(async (req, res) => {
   const db = store.read()
   const assessmentId = req.body.assessmentId || db.assessments.find(item => item.status === 'published')?.id
   const report = assessmentId ? buildClassReport(db, assessmentId) : null
-  const answer = await teacherAssistant(String(req.body.message || ''), db, report)
-  res.json({ answer, mode: process.env.DEEPSEEK_API_KEY ? 'deepseek' : 'data-demo' })
+  const assessment = assessmentId ? db.assessments.find(item => item.id === assessmentId) : undefined
+  const message = String(req.body.message || '')
+  const retrievedContext = buildRetrievedContext(db, message, assessment?.courseId, assessmentId)
+  const promptPath = path.resolve('prompts', 'teacher-assistant.md')
+  const globalPrompt = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, 'utf8') : ''
+  const answer = await teacherAssistant(message, db, report, retrievedContext, globalPrompt)
+  res.json({ answer, mode: bailianReady() ? 'bailian' : 'data-demo' })
 }))
 
 app.post('/api/assistant/transcribe', upload.single('audio'), asyncRoute(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: '没有收到音频' })
   try {
-    const text = await transcribePcm(fs.readFileSync(req.file.path))
-    res.json({ text, provider: 'xfyun' })
+    const text = await transcribeAudio(fs.readFileSync(req.file.path), req.file.mimetype)
+    res.json({ text, provider: 'bailian' })
   } finally {
     if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path)
   }
 }))
 
-app.post('/api/demo/reset', (_req, res) => res.json(store.reset()))
+app.post('/api/demo/reset', (_req, res) => { const db = store.reset(); syncKnowledgeBase(db); res.json(db) })
+
+app.get('/api/knowledge/:courseId/manifest', (req, res) => {
+  const db = store.read(); syncKnowledgeBase(db, req.params.courseId)
+  const manifest = path.join(knowledgeRoot(), req.params.courseId.replace(/[^a-zA-Z0-9_-]/g, '-'), 'manifest.json')
+  if (!fs.existsSync(manifest)) return res.status(404).json({ error: '课程知识目录不存在' })
+  res.type('json').send(fs.readFileSync(manifest, 'utf8'))
+})
 
 const clientDir = path.resolve('dist')
 if (fs.existsSync(clientDir)) {
@@ -322,11 +400,10 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
   res.status(message.includes('File too large') ? 413 : 500).json({ error: message })
 })
 
+syncKnowledgeBase(store.read())
 app.listen(port, '0.0.0.0', () => {
   console.log(`知行教学诊断服务已启动：http://localhost:${port}`)
-  for (const info of Object.values(os.networkInterfaces()).flat()) {
-    if (info?.family === 'IPv4' && !info.internal) console.log(`局域网访问：http://${info.address}:${port}`)
-  }
+  for (const address of lanAddresses(port)) console.log(`局域网访问：${address}`)
 })
 
 export { app }

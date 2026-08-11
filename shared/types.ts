@@ -19,6 +19,10 @@ export interface Material {
   size: number
   extractedText: string
   path?: string
+  imageUrls?: string[]
+  extractionNotes?: string[]
+  pageCount?: number
+  knowledgeFile?: string
   status: 'ready' | 'processing' | 'failed'
   createdAt: string
 }
@@ -123,6 +127,13 @@ export interface Database {
   students: Student[]
   submissions: Submission[]
   practices: Practice[]
+  settings?: {
+    network?: {
+      hotspotSsid: string
+      hotspotPassword: string
+      preferredAddress?: string
+    }
+  }
 }
 
 export interface GenerateConfig {

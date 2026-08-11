@@ -81,7 +81,8 @@ function seed(): Database {
       demoSubmission('stu-5', [questionAnswers.q1('A', false), questionAnswers.q2('10', 5), questionAnswers.q3('y=x+2', 3), questionAnswers.q4('不会', 0)]),
       demoSubmission('stu-6', [questionAnswers.q1('B', true), questionAnswers.q2('10', 5), questionAnswers.q3('y=2x+1', 10), questionAnswers.q4('P(2,3)，前增后减', 10)])
     ],
-    practices: []
+    practices: [],
+    settings: { network: { hotspotSsid: '', hotspotPassword: '', preferredAddress: '' } }
   }
 }
 

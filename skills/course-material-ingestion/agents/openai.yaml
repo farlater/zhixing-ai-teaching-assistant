@@ -1,0 +1,4 @@
+interface:
+  display_name: "课程资料入库"
+  short_description: "解析课程文件、图片与公式并生成可追溯、可检索的教学知识目录"
+  default_prompt: "Use $course-material-ingestion to parse course documents and build provenance-aware Markdown knowledge files."
