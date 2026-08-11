@@ -17,4 +17,4 @@ Use a hybrid pass for Office files: direct parsing preserves semantic structure,
 - [MinerU](https://github.com/opendatalab/MinerU) converts PDF, images and Office files to Markdown/JSON, including formulas, tables, reading order and OCR. Consider it when the teacher PC can afford its larger installation.
 - [Docling](https://github.com/docling-project/docling) provides a unified document representation, advanced PDF layout understanding, OCR and Markdown/JSON export. Consider it for complex tables or multi-column documents.
 
-Do not silently switch to an optional engine. Record the chosen parser and any page/image cap in the material notes.
+Do not silently switch to an optional engine or truncate selected pages/images. Record the chosen parser and any failed item in the material notes.

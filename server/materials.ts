@@ -29,7 +29,7 @@ function mediaType(name: string) {
 
 async function officeAssets(zip: JSZip, prefixes: string[], outputDir: string, publicBase: string) {
   const assets: ExtractedAsset[] = []
-  const files = Object.values(zip.files).filter(item => !item.dir && prefixes.some(prefix => item.name.startsWith(prefix)) && mediaType(item.name).startsWith('image/')).slice(0, 24)
+  const files = Object.values(zip.files).filter(item => !item.dir && prefixes.some(prefix => item.name.startsWith(prefix)) && mediaType(item.name).startsWith('image/'))
   fs.mkdirSync(outputDir, { recursive: true })
   for (const [index, item] of files.entries()) {
     const extension = path.extname(item.name).toLowerCase() || '.png'
@@ -46,7 +46,7 @@ async function renderPdfPages(buffer: Buffer, outputDir: string, publicBase: str
   const document = await pdfjs.getDocument({ data: new Uint8Array(buffer), useWorkerFetch: false }).promise
   const assets: ExtractedAsset[] = []
   fs.mkdirSync(outputDir, { recursive: true })
-  for (let pageNumber = 1; pageNumber <= Math.min(document.numPages, 12); pageNumber++) {
+  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
     const page = await document.getPage(pageNumber)
     const viewport = page.getViewport({ scale: 1.35 })
     const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height))
@@ -70,7 +70,6 @@ export async function extractMaterial(filePath: string, mimeType: string, origin
     const buffer = fs.readFileSync(filePath)
     const result = await pdf(buffer)
     const rendered = await renderPdfPages(buffer, outputDir, publicBase)
-    if (rendered.pageCount > 12) notes.push(`PDF 共 ${rendered.pageCount} 页，当前为控制识别成本仅渲染前 12 页；原始文本仍完整提取。`)
     if (result.text.trim().length < 200) notes.push('检测到扫描型或低文本 PDF，将使用页面图像辅助视觉识别。')
     return { text: result.text.slice(0, 160000), assets: rendered.assets, notes, pageCount: rendered.pageCount }
   }

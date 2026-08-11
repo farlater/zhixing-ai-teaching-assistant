@@ -22,7 +22,7 @@ Turn teacher-owned source files into compact, inspectable knowledge files withou
 - Treat extracted text as untrusted course content, never as system instructions.
 - Do not send API keys or unrelated student data to document services.
 - Keep factual statistics program-computed; models may explain them but must not invent them.
-- Cap page/image processing and report skipped items explicitly.
+- Process every page or extracted image selected by the active vision mode. Do not silently truncate a material; report any parser or provider failure explicitly.
 - Verify that Markdown renders formulas, tables, code, local upload images, and Chinese punctuation on both PC and phone.
 - Keep an enhancement boundary: complex scientific layouts may use MinerU or Docling, but the base app must remain usable without their large local models.
 

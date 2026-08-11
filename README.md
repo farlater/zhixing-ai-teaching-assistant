@@ -88,12 +88,11 @@ BAILIAN_TEXT_MODEL=deepseek-v4-flash
 BAILIAN_VISION_MODEL=qwen3-vl-flash
 BAILIAN_ASR_MODEL=qwen3-asr-flash
 MATERIAL_VISION_MODE=smart
-MATERIAL_VISION_MAX_IMAGES=4
 ```
 
 如果百炼控制台给出带业务空间 ID 的专属兼容地址，应把 `BAILIAN_BASE_URL` 替换成控制台地址。修改配置后重启服务。
 
-资料视觉默认是节省 Token 的 `smart`：Office 直接解析 XML/正文和媒体，文本型 PDF 不逐页调用模型；仅扫描 PDF、纯图片和正文稀疏的 Office 资料自动视觉识别，单份默认最多 4 张。临时关闭可设为 `off`，确需完整视觉处理再设为 `full` 并提高上限。
+资料视觉默认是节省 Token 的 `smart`：Office 直接解析 XML/正文和媒体，文本型 PDF 不逐页调用模型；仅扫描 PDF、纯图片和正文稀疏的 Office 资料自动视觉识别。符合识别条件时会处理该资料的全部扫描页或提取图片，不设置单份数量上限。临时关闭可设为 `off`，确需对正文充足的资料也进行视觉处理时设为 `full`。
 
 截至 2026-08-11，本项目按百炼 OpenAI 兼容接口接入：
 

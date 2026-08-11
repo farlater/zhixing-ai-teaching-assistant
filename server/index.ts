@@ -137,19 +137,17 @@ app.post('/api/courses/:courseId/materials', upload.single('file'), asyncRoute(a
     text = extracted.text; imageUrls = extracted.assets.map(item => item.publicUrl); extractionNotes = extracted.notes; pageCount = extracted.pageCount
     const extension = path.extname(originalName).toLowerCase()
     const visionMode = (process.env.MATERIAL_VISION_MODE || 'smart').toLowerCase()
-    const visionLimit = Math.max(1, Number(process.env.MATERIAL_VISION_MAX_IMAGES || 4))
     const isStandaloneImage = req.file.mimetype.startsWith('image/')
     const isScannedPdf = extension === '.pdf' && text.trim().length < 500
     const isSparseOffice = ['.pptx', '.docx'].includes(extension) && text.trim().length < 250
     const shouldReadImages = Boolean(extracted.assets.length) && visionMode !== 'off' && (visionMode === 'full' || isStandaloneImage || isScannedPdf || isSparseOffice)
     if (shouldReadImages && bailianReady()) {
       const descriptions: string[] = []
-      for (const [index, asset] of extracted.assets.slice(0, visionLimit).entries()) {
+      for (const [index, asset] of extracted.assets.entries()) {
         const description = await describeInstructionalImage(asset.filePath, asset.mimeType)
         if (description) descriptions.push(`## 视觉提取 ${index + 1}\n\n${description}`)
       }
       if (descriptions.length) text = `${text}\n\n# 图片与扫描页识别\n\n${descriptions.join('\n\n')}`.slice(0, 180000)
-      if (extracted.assets.length > visionLimit) extractionNotes.push(`共发现 ${extracted.assets.length} 张图，本次视觉识别前 ${visionLimit} 张以控制 Token；可调整 MATERIAL_VISION_MAX_IMAGES。`)
     } else if (shouldReadImages) extractionNotes.push('尚未配置百炼 API，图片已提取保存，配置后重新上传即可识别。')
     else if (extracted.assets.length && visionMode === 'smart') extractionNotes.push(`智能节省模式：已提取 ${extracted.assets.length} 张页面/插图，但正文信息充足，未自动调用视觉模型。`)
   } catch (error) { status = 'failed'; extractionNotes = [error instanceof Error ? error.message : '资料解析失败'] }
