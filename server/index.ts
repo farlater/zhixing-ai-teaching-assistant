@@ -334,10 +334,31 @@ app.post('/api/assessments/:id/close', (req, res) => {
   res.json(assessment)
 })
 
+const classroomView = (assessment: Assessment) => {
+  const db = store.read()
+  const course = db.courses.find(item => item.id === assessment.courseId)
+  const questions = assessment.questionIds.map(questionId => db.questions.find(item => item.id === questionId)).filter(Boolean).map(question => {
+    const { answer: _answer, explanation: _explanation, rubric: _rubric, ...safeQuestion } = question as Question
+    return safeQuestion
+  })
+  return { assessment, course, questions, submittedCount: db.submissions.filter(item => item.assessmentId === assessment.id).length }
+}
+
+app.get('/api/classrooms/available', (_req, res) => {
+  const assessments = store.read().assessments.filter(item => item.status === 'published')
+  res.json(assessments.map(classroomView))
+})
+
+app.get('/api/classrooms/assessment/:id', (req, res) => {
+  const assessment = store.read().assessments.find(item => item.id === req.params.id && item.status === 'published')
+  if (!assessment) return res.status(404).json({ error: '未找到这节演示课程' })
+  res.json(classroomView(assessment))
+})
+
 app.get('/api/classrooms/:code', (req, res) => {
   const db = store.read()
   const assessment = db.assessments.find(item => item.joinCode.toUpperCase() === req.params.code.toUpperCase() && item.status === 'published')
-  if (!assessment) return res.status(404).json({ error: '未找到正在进行的课堂，请检查课堂码' })
+  if (!assessment) return res.status(404).json({ error: '未找到正在进行的课堂，请返回入口重新选择' })
   const course = db.courses.find(item => item.id === assessment.courseId)
   const questions = assessment.questionIds.map(questionId => db.questions.find(item => item.id === questionId)).filter(Boolean).map(question => {
     const { answer: _answer, explanation: _explanation, rubric: _rubric, ...safeQuestion } = question as Question
@@ -362,6 +383,18 @@ app.post('/api/students/join', (req, res) => {
   const name = String(req.body.name || '').trim()
   if (!name) return res.status(400).json({ error: '请输入姓名' })
   const db = store.read()
+  if (db.settings?.demoShowcase) {
+    let demoStudent: Student | undefined
+    store.update(data => {
+      const reserved = data.students.find(item => item.id === 'demo-live-student')
+      if (!reserved) return
+      reserved.name = name
+      reserved.className = String(req.body.className || '23级机械设计1班')
+      reserved.studentNo = String(req.body.studentNo || reserved.studentNo || '')
+      demoStudent = { ...reserved }
+    })
+    if (demoStudent) return res.json(demoStudent)
+  }
   let student = db.students.find(item => item.name === name && item.className === (req.body.className || '临时课堂'))
   if (!student) {
     student = { id: id('student'), name, studentNo: req.body.studentNo || '', className: req.body.className || '临时课堂', createdAt: now() }

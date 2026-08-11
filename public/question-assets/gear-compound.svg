@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 440">
+  <rect width="900" height="440" rx="28" fill="#f3f7f5"/>
+  <text x="42" y="55" font-family="Microsoft YaHei,sans-serif" font-size="28" font-weight="700" fill="#173f3a">两级定轴轮系</text>
+  <g fill="none" stroke="#173f3a" stroke-width="9">
+    <circle cx="180" cy="235" r="70"/><circle cx="340" cy="235" r="90"/>
+    <circle cx="340" cy="235" r="42"/><circle cx="535" cy="235" r="110"/>
+  </g>
+  <g fill="#173f3a"><circle cx="180" cy="235" r="10"/><circle cx="340" cy="235" r="10"/><circle cx="535" cy="235" r="10"/></g>
+  <line x1="340" y1="118" x2="340" y2="352" stroke="#89a49b" stroke-width="5" stroke-dasharray="10 8"/>
+  <path d="M135 134 A118 118 0 0 1 91 221" fill="none" stroke="#d67f58" stroke-width="8" marker-end="url(#a)"/>
+  <path d="M590 105 A150 150 0 0 1 660 205" fill="none" stroke="#275d56" stroke-width="8" marker-end="url(#b)"/>
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="5" refY="3" orient="auto"><path d="M0 0L0 6L6 3z" fill="#d67f58"/></marker><marker id="b" markerWidth="10" markerHeight="10" refX="5" refY="3" orient="auto"><path d="M0 0L0 6L6 3z" fill="#275d56"/></marker></defs>
+  <g font-family="Microsoft YaHei,sans-serif" font-size="25" font-weight="700" fill="#405b53"><text x="115" y="355">1：z₁=20</text><text x="275" y="380">2：z₂=40</text><text x="285" y="100">3：z₃=15</text><text x="500" y="390">4：z₄=45</text></g>
+  <text font-family="Microsoft YaHei,sans-serif" font-size="23" fill="#687c75"><tspan x="665" y="235">齿轮 2 与 3</tspan><tspan x="665" y="270">固定在同一轴上</tspan></text>
+</svg>

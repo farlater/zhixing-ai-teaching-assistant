@@ -130,6 +130,7 @@ export interface Database {
   submissions: Submission[]
   practices: Practice[]
   settings?: {
+    demoShowcase?: boolean
     network?: {
       hotspotSsid: string
       hotspotPassword: string

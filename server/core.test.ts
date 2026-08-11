@@ -35,24 +35,24 @@ test('主观题演示评分始终限制在合法分值内', () => {
 
 test('示例数据能生成班级报告和学生画像', () => {
   const db = store.reset()
-  const report = buildClassReport(db, 'assessment-demo')
-  const profile = buildStudentProfile(db, 'stu-1')
-  assert.equal(report?.submittedCount, 6)
-  assert.equal(report?.questionStats.length, 4)
+  const report = buildClassReport(db, 'assessment-fourbar')
+  const profile = buildStudentProfile(db, 'demo-student-01')
+  assert.equal(report?.submittedCount, 60)
+  assert.equal(report?.questionStats.length, 3)
   assert.ok((report?.knowledgeMastery.length || 0) >= 3)
-  assert.equal(profile?.student.name, '林晓雨')
+  assert.equal(profile?.student.name, '林浩然')
   assert.ok((profile?.mastery.length || 0) >= 1)
 })
 
 test('课堂数据能生成目录化知识文件并按问题检索', () => {
   const db = store.reset()
-  syncKnowledgeBase(db, 'course-demo')
-  const base = path.resolve('data', 'knowledge', 'course-demo')
+  syncKnowledgeBase(db, 'course-fourbar')
+  const base = path.resolve('data', 'knowledge', 'course-fourbar')
   assert.ok(fs.existsSync(path.join(base, '00-course.md')))
-  assert.ok(fs.existsSync(path.join(base, '04-classrooms', 'assessment-demo', 'submissions', 'stu-1.md')))
-  const context = buildRetrievedContext(db, '林晓雨这节课表现如何', 'course-demo', 'assessment-demo')
-  assert.match(context, /来源：course-demo\//)
-  assert.match(context, /林晓雨/)
+  assert.ok(fs.existsSync(path.join(base, '04-classrooms', 'assessment-fourbar', 'submissions', 'demo-student-01.md')))
+  const context = buildRetrievedContext(db, '林浩然这节课表现如何', 'course-fourbar', 'assessment-fourbar')
+  assert.match(context, /来源：course-fourbar\//)
+  assert.match(context, /林浩然/)
 })
 
 test('图片识别使用百炼视觉并返回 Token 用量', async () => {

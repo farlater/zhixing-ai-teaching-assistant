@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 440">
+  <rect width="900" height="440" rx="28" fill="#f3f7f5"/>
+  <text x="42" y="55" font-family="Microsoft YaHei,sans-serif" font-size="28" font-weight="700" fill="#173f3a">摆动导杆机构的极限位置</text>
+  <circle cx="310" cy="250" r="14" fill="#173f3a"/><circle cx="635" cy="320" r="14" fill="#173f3a"/>
+  <path d="M280 280h60m-50 14h40m-30 14h20M605 350h60m-50 14h40m-30 14h20" stroke="#173f3a" stroke-width="7"/>
+  <circle cx="310" cy="250" r="115" fill="none" stroke="#b7c9c3" stroke-width="3" stroke-dasharray="10 9"/>
+  <line x1="310" y1="250" x2="405" y2="184" stroke="#d67f58" stroke-width="14" stroke-linecap="round"/>
+  <rect x="391" y="165" width="48" height="42" rx="8" transform="rotate(-35 415 186)" fill="#f2c28f" stroke="#173f3a" stroke-width="5"/>
+  <line x1="635" y1="320" x2="415" y2="186" stroke="#275d56" stroke-width="18" stroke-linecap="round"/>
+  <line x1="635" y1="320" x2="400" y2="282" stroke="#789b91" stroke-width="8" stroke-dasharray="13 9"/>
+  <line x1="635" y1="320" x2="486" y2="112" stroke="#789b91" stroke-width="8" stroke-dasharray="13 9"/>
+  <path d="M536 272 A125 125 0 0 1 565 205" fill="none" stroke="#c15f4e" stroke-width="6"/>
+  <text x="535" y="190" font-family="Cambria Math,serif" font-size="36" font-weight="700" fill="#c15f4e">ψ = 40°</text>
+  <text x="575" y="415" font-family="Microsoft YaHei,sans-serif" font-size="24" fill="#536b64">θ = ψ</text>
+</svg>

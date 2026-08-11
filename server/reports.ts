@@ -26,7 +26,8 @@ export function buildClassReport(db: Database, assessmentId: string): ClassRepor
   const questionStats = questions.map((question, index) => {
     const answers = submissions.flatMap(submission => submission.answers.filter(answer => answer.questionId === question.id))
     const average = answers.length ? answers.reduce((sum, answer) => sum + answer.score, 0) / answers.length : 0
-    return { id: question.id, index: index + 1, stem: question.stem, accuracy: answers.length ? Math.round(answers.filter(answer => answer.correct).length / answers.length * 100) : 0, average: Number(average.toFixed(1)), maxScore: question.maxScore }
+    const cleanStem = question.stem.replace(/!\[[^\]]*\]\([^)]+\)\s*/g, '').replace(/\$([^$]+)\$/g, '$1')
+    return { id: question.id, index: index + 1, stem: cleanStem, accuracy: answers.length ? Math.round(answers.filter(answer => answer.correct).length / answers.length * 100) : 0, average: Number(average.toFixed(1)), maxScore: question.maxScore }
   })
 
   const errors = submissions.flatMap(submission => submission.answers.map(answer => answer.diagnosis.errorType).filter(Boolean) as string[])

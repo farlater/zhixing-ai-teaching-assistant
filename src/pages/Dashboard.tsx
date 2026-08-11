@@ -18,7 +18,7 @@ export default function Dashboard() {
   if (!data) return <Spinner label="正在汇总课堂数据" />
   const stats = [
     { label: '课程', value: data.courses, note: '已建立课程空间', icon: BookOpen, tone: 'green' },
-    { label: '进行中课堂', value: data.activeClasses, note: '连热点后自动进入', icon: ClipboardCheck, tone: 'orange' },
+    { label: '进行中课堂', value: data.activeClasses, note: '学生端可选择进入', icon: ClipboardCheck, tone: 'orange' },
     { label: '学生档案', value: data.students, note: '长期学习记录', icon: Users, tone: 'blue' },
     { label: '今日提交', value: data.submissionsToday, note: '份诊断结果已形成', icon: CheckCircle2, tone: 'violet' }
   ]

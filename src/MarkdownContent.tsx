@@ -10,7 +10,7 @@ export function MarkdownContent({ content, compact = false }: { content?: string
       remarkPlugins={[remarkGfm, remarkMath]}
       rehypePlugins={[rehypeSanitize, rehypeKatex]}
       urlTransform={(url, key, node) => {
-        if (key === 'src' && (url.startsWith('/uploads/') || url.startsWith('data:image/'))) return url
+        if (key === 'src' && (url.startsWith('/uploads/') || url.startsWith('/question-assets/') || url.startsWith('data:image/'))) return url
         return defaultUrlTransform(url)
       }}
       components={{
