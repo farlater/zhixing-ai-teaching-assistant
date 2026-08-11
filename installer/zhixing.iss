@@ -7,6 +7,9 @@
 #ifndef MyAppVersion
   #define MyAppVersion "0.1.0"
 #endif
+#ifndef LanguageFile
+  #define LanguageFile "compiler:Default.isl"
+#endif
 
 #define MyAppName "知行 AI 教学诊断"
 #define MyAppPublisher "知行教学诊断"
@@ -32,7 +35,7 @@ CloseApplications=force
 RestartApplications=no
 
 [Languages]
-Name: "chinesesimp"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "chinesesimp"; MessagesFile: "{#LanguageFile}"
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

@@ -93,8 +93,12 @@ if (-not $SkipInno) {
     $IsccPath = $candidatePaths | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
   }
   if (-not $IsccPath -or -not (Test-Path -LiteralPath $IsccPath)) { throw '未找到 Inno Setup 6 的 ISCC.exe。可使用 -SkipInno 仅生成便携包。' }
+  $languageFile = Join-Path $outputDirectory 'ChineseSimplified.isl'
+  if (-not (Test-Path -LiteralPath $languageFile)) {
+    Invoke-WebRequest -Uri 'https://jrsoftware.org/files/istrans/ChineseSimplified.isl' -OutFile $languageFile
+  }
   $version = (Get-Content -Raw -LiteralPath (Join-Path $projectRoot 'package.json') | ConvertFrom-Json).version
-  & $IsccPath "/DSourceDir=$packageRoot" "/DOutputDir=$outputDirectory" "/DMyAppVersion=$version" (Join-Path $PSScriptRoot 'zhixing.iss')
+  & $IsccPath "/DSourceDir=$packageRoot" "/DOutputDir=$outputDirectory" "/DMyAppVersion=$version" "/DLanguageFile=$languageFile" (Join-Path $PSScriptRoot 'zhixing.iss')
   if ($LASTEXITCODE -ne 0) { throw 'Inno Setup 安装包编译失败。' }
 }
 
