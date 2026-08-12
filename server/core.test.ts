@@ -7,13 +7,24 @@ import type { Question } from '../shared/types.js'
 import { programGrade, heuristicSubjectiveGrade } from './grading.js'
 import { buildClassReport, buildStudentProfile } from './reports.js'
 import { store } from './store.js'
-import { extractAnswerFromImage, extractModelJson, generatePracticeQuestion } from './ai.js'
+import { analyzeQuestionBankMaterial, extractAnswerFromImage, extractModelJson, generatePracticeQuestion } from './ai.js'
 import { buildRetrievedContext, syncKnowledgeBase } from './knowledgeBase.js'
 
 const baseQuestion: Question = {
-  id: 'test-q', courseId: 'test-course', knowledgePointId: 'test-kp', type: 'single', difficulty: '基础',
-  stem: '测试题', options: ['甲', '乙'], answer: 'B', explanation: '答案为 B', maxScore: 5,
-  abilities: ['概念理解'], source: 'manual', status: 'confirmed', createdAt: new Date().toISOString()
+  id: 'test-q',
+  courseId: 'test-course',
+  knowledgePointId: 'test-kp',
+  type: 'single',
+  difficulty: '基础',
+  stem: '测试题',
+  options: ['甲', '乙'],
+  answer: 'B',
+  explanation: '答案为 B',
+  maxScore: 5,
+  abilities: ['概念理解'],
+  source: 'manual',
+  status: 'confirmed',
+  createdAt: new Date().toISOString(),
 }
 
 test('客观题由程序准确判定且生成诊断', () => {
@@ -26,7 +37,13 @@ test('客观题由程序准确判定且生成诊断', () => {
 })
 
 test('主观题演示评分始终限制在合法分值内', () => {
-  const question: Question = { ...baseQuestion, type: 'short', answer: 'y=2x+1', maxScore: 10, rubric: '过程 8 分，结论 2 分' }
+  const question: Question = {
+    ...baseQuestion,
+    type: 'short',
+    answer: 'y=2x+1',
+    maxScore: 10,
+    rubric: '过程 8 分，结论 2 分',
+  }
   const result = heuristicSubjectiveGrade(question, 'y=2x+1')
   assert.equal(result.score, 10)
   assert.equal(result.correct, true)
@@ -38,15 +55,16 @@ test('展示数据包含60名大学课程学生、12次课堂检测、12次作�
   const report = buildClassReport(db, 'demo-classroom-01')
   const structureReport = buildClassReport(db, 'assessment-structure')
   assert.equal(db.courses.length, 3)
-  assert.equal(db.questions.length, 10)
+  assert.equal(db.questions.filter((item) => !item.id.startsWith('demo-history-')).length, 10)
   assert.equal(db.students.length, 60)
-  assert.equal(db.assessments.filter(item => item.category === 'classroom').length, 12)
-  assert.equal(db.assessments.filter(item => item.category === 'homework').length, 12)
-  assert.equal(new Set(db.assessments.filter(item => item.category === 'classroom').map(item => item.title.split(' · ')[1])).size, 12)
-  assert.ok(db.assessments.some(item => item.title.includes('机械系统的方案设计')))
+  assert.equal(db.assessments.filter((item) => item.category === 'classroom').length, 12)
+  assert.equal(db.assessments.filter((item) => item.category === 'homework').length, 12)
+  assert.equal(new Set(db.assessments.filter((item) => item.category === 'classroom').map((item) => item.title.split(' · ')[1])).size, 12)
+  assert.ok(db.assessments.some((item) => item.title.includes('机械系统的方案设计')))
   assert.equal(db.submissions.length, 1440)
   assert.equal(report?.submittedCount, 60)
-  assert.equal(report?.questionStats.length, 3)
+  assert.ok((report?.questionStats.length || 0) >= 8 && (report?.questionStats.length || 0) <= 12)
+  assert.ok(db.assessments.filter((item) => item.id.startsWith('demo-')).every((item) => (item.questionCount || 0) >= 8 && (item.questionCount || 0) <= 12))
   assert.equal(structureReport?.submittedCount, 60)
   assert.equal(structureReport?.questionStats.length, 4)
   assert.equal(structureReport?.diagnosis.source, 'preset')
@@ -56,15 +74,20 @@ test('展示数据包含60名大学课程学生、12次课堂检测、12次作�
   assert.equal(profile?.student.className, '机械2301班')
   assert.equal(profile?.history.length, 12)
   assert.ok((profile?.weightedScore || 0) > 0)
-  assert.equal(db.assessments.filter(item => item.status === 'published').length, 1)
-  assert.equal(db.questions.find(item => item.id === 'q-structure-photo')?.type, 'short')
-  assert.equal(db.assessments.some(item => item.id === 'assessment-photo-demo'), false)
-  assert.ok(db.assessments.find(item => item.id === 'assessment-structure')?.questionIds.includes('q-structure-photo'))
+  assert.equal(db.assessments.filter((item) => item.status === 'published').length, 1)
+  assert.equal(db.questions.find((item) => item.id === 'q-structure-photo')?.type, 'short')
+  assert.equal(
+    db.assessments.some((item) => item.id === 'assessment-photo-demo'),
+    false,
+  )
+  assert.ok(db.assessments.find((item) => item.id === 'assessment-structure')?.questionIds.includes('q-structure-photo'))
 })
 
 test('DeepSeek 返回外层对象、数组和尾部说明时仍能解析题目 JSON', () => {
   const response = '下面是结果：\n```json\n{"questions":[{"stem":"含有 [括号] 的题目","options":["A","B"]}]}\n```\n以上题目均来自课程资料。'
-  const parsed = extractModelJson(response) as { questions: { stem: string }[] }
+  const parsed = extractModelJson(response) as {
+    questions: { stem: string }[]
+  }
   assert.equal(parsed.questions.length, 1)
   assert.equal(parsed.questions[0].stem, '含有 [括号] 的题目')
 })
@@ -90,11 +113,22 @@ test('图片识别使用百炼视觉并返回 Token 用量', async () => {
     globalThis.fetch = async (input, init) => {
       assert.equal(String(input), 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions')
       assert.equal((init?.headers as Record<string, string>).authorization, 'Bearer test-bailian-key')
-      const body = JSON.parse(String(init?.body)) as { model: string; messages: { content: ({ image_url?: { url: string }; text?: string })[] }[] }
+      const body = JSON.parse(String(init?.body)) as {
+        model: string
+        messages: {
+          content: { image_url?: { url: string }; text?: string }[]
+        }[]
+      }
       assert.equal(body.model, 'qwen3-vl-flash')
-      assert.match(body.messages[0].content[0].image_url?.url || '', /^data:image\/png;base64,/) 
+      assert.match(body.messages[0].content[0].image_url?.url || '', /^data:image\/png;base64,/)
       assert.match(body.messages[0].content[1].text || '', /不评分/)
-      return new Response(JSON.stringify({ choices: [{ message: { content: 'x=2，计算过程完整' } }], usage: { total_tokens: 321 } }), { status: 200, headers: { 'content-type': 'application/json' } })
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content: 'x=2，计算过程完整' } }],
+          usage: { total_tokens: 321 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
     }
     const result = await extractAnswerFromImage(imagePath, 'image/png')
     assert.equal(result.provider, 'bailian')
@@ -113,21 +147,86 @@ test('强化练习提示词会携带上一轮作答、诊断和公式', async ()
   const originalKey = process.env.DASHSCOPE_API_KEY
   process.env.DASHSCOPE_API_KEY = 'test-bailian-key'
   const db = store.reset()
-  const point = db.knowledgePoints.find(item => item.id === 'kp-structure-analysis')!
-  const sourceQuestion = db.questions.find(item => item.id === 'q-structure-photo')!
-  const lastAnswer = db.submissions.flatMap(item => item.answers).find(item => item.questionId === sourceQuestion.id)!
+  const point = db.knowledgePoints.find((item) => item.id === 'kp-structure-analysis')!
+  const sourceQuestion = db.questions.find((item) => item.id === 'q-structure-photo')!
+  const lastAnswer = db.submissions.flatMap((item) => item.answers).find((item) => item.questionId === sourceQuestion.id)!
   try {
     globalThis.fetch = async (_input, init) => {
-      const body = JSON.parse(String(init?.body)) as { messages: { role: string; content: string }[] }
+      const body = JSON.parse(String(init?.body)) as {
+        messages: { role: string; content: string }[]
+      }
       assert.match(body.messages[0].content, /上一轮的具体错误位置/)
       assert.match(body.messages[1].content, /studentAnswer/)
       assert.match(body.messages[1].content, /F=3n-2P_L-P_H/)
-      return new Response(JSON.stringify({ choices: [{ message: { content: '{"question":{"stem":"默写自由度公式并说明修正项","answer":"F=3n-2P_L-P_H","explanation":"针对上一轮漏项","rubric":"公式3分，说明2分","formula":"F=3n-2P_L-P_H","maxScore":5,"abilities":["公式掌握"]}}' } }] }), { status: 200, headers: { 'content-type': 'application/json' } })
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: '{"question":{"stem":"默写自由度公式并说明修正项","answer":"F=3n-2P_L-P_H","explanation":"针对上一轮漏项","rubric":"公式3分，说明2分","formula":"F=3n-2P_L-P_H","maxScore":5,"abilities":["公式掌握"]}}',
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
     }
     const question = await generatePracticeQuestion({ mode: 'formula', point, sourceQuestion, lastAnswer }, db)
     assert.equal(question.type, 'blank')
     assert.equal(question.source, 'practice')
     assert.match(String(question.answer), /F=3n-2P_L-P_H/)
+  } finally {
+    globalThis.fetch = originalFetch
+    if (originalKey === undefined) delete process.env.DASHSCOPE_API_KEY
+    else process.env.DASHSCOPE_API_KEY = originalKey
+  }
+})
+
+test('批量题库分析会保留 MinerU 题图并生成待确认草稿', async () => {
+  const originalFetch = globalThis.fetch
+  const originalKey = process.env.DASHSCOPE_API_KEY
+  process.env.DASHSCOPE_API_KEY = 'test-bailian-key'
+  const db = store.reset()
+  try {
+    globalThis.fetch = async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as {
+        messages: { content: string }[]
+      }
+      assert.match(body.messages[0].content, /忠实保留原题条件/)
+      assert.match(body.messages[1].content, /MinerU 提取题图/)
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  questions: [
+                    {
+                      knowledgePointId: 'kp-structure-analysis',
+                      type: 'short',
+                      difficulty: '进阶',
+                      stem: '![MinerU 提取题图](/uploads/question-banks/demo/figure.png)\n\n计算该机构自由度。',
+                      answer: 'F=1',
+                      explanation: '按自由度公式计算。',
+                      rubric: '过程8分，结论2分。',
+                      formula: 'F=3n-2P_L-P_H',
+                      maxScore: 10,
+                      abilities: ['公式应用', '推理'],
+                    },
+                  ],
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    }
+    const questions = await analyzeQuestionBankMaterial('course-structure', db, '## 题1\n![MinerU 提取题图](/uploads/question-banks/demo/figure.png)\n计算该机构自由度。\n答案：F=1')
+    assert.equal(questions.length, 1)
+    assert.equal(questions[0].status, 'draft')
+    assert.equal(questions[0].source, 'bank')
+    assert.match(questions[0].stem, /\/uploads\/question-banks\/demo\/figure.png/)
   } finally {
     globalThis.fetch = originalFetch
     if (originalKey === undefined) delete process.env.DASHSCOPE_API_KEY

@@ -33,6 +33,22 @@ export interface Material {
   createdAt: string
 }
 
+export interface QuestionImportJob {
+  id: string
+  courseId: string
+  name: string
+  type: string
+  size: number
+  sourcePath?: string
+  parserTaskId?: string
+  questionIds: string[]
+  status: 'processing' | 'review' | 'completed' | 'failed'
+  progress: string
+  error?: string
+  createdAt: string
+  completedAt?: string
+}
+
 export interface Course {
   id: string
   name: string
@@ -149,6 +165,7 @@ export interface Database {
   submissions: Submission[]
   practices: Practice[]
   videoProgress: VideoProgress[]
+  questionImports: QuestionImportJob[]
   settings?: {
     demoShowcase?: boolean
     demoSeedVersion?: number
@@ -186,9 +203,22 @@ export interface ClassReport {
   accuracy: number
   scoreDistribution: { label: string; value: number }[]
   knowledgeMastery: { id: string; name: string; value: number }[]
-  questionStats: { id: string; index: number; stem: string; accuracy: number; average: number; maxScore: number }[]
+  questionStats: {
+    id: string
+    index: number
+    stem: string
+    accuracy: number
+    average: number
+    maxScore: number
+  }[]
   errorTypes: { name: string; value: number }[]
-  students: { id: string; name: string; score: number; rate: number; weakPoint: string }[]
+  students: {
+    id: string
+    name: string
+    score: number
+    rate: number
+    weakPoint: string
+  }[]
   suggestions: string[]
   diagnosis: ReportDiagnosis
 }

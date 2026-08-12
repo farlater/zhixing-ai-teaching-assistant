@@ -160,7 +160,7 @@ public class MainActivity extends Activity {
         settings.setUseWideViewPort(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         settings.setMediaPlaybackRequiresUserGesture(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " ZhixingStudentApp/0.3.1");
+        settings.setUserAgentString(settings.getUserAgentString() + " ZhixingStudentApp/0.4.0");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
