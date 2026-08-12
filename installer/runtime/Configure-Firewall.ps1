@@ -14,6 +14,8 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
   exit 0
 }
 
-$ruleName = '知行 AI 教学诊断（局域网）'
+$ruleName = '辽科智学（局域网）'
+$legacyRuleName = '知行 AI 教学诊断（局域网）'
 Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue
 New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Action Allow -Protocol TCP -LocalPort $Port -Program ([IO.Path]::GetFullPath($NodePath)) -Profile Private | Out-Null
+Get-NetFirewallRule -DisplayName $legacyRuleName -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue

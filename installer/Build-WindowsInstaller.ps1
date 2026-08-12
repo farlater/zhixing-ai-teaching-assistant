@@ -82,7 +82,7 @@ try {
   if ($LASTEXITCODE -ne 0) { throw '生产依赖安装失败。' }
 } finally { Pop-Location }
 
-$zipPath = Join-Path $outputDirectory 'ZhixingAI-Windows-Portable.zip'
+$zipPath = Join-Path $outputDirectory 'LiaokeZhixue-Windows-Portable.zip'
 if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
 $tarExecutable = (Get-Command tar.exe -ErrorAction SilentlyContinue).Source
 if ($tarExecutable) {

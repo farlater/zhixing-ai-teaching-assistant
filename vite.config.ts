@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg'],
       manifest: {
-        name: '辽宁科技大学 · 知行教学诊断',
-        short_name: '知行课堂',
+        name: '辽科智学 · 教学诊断',
+        short_name: '辽科智学',
         description: '辽宁科技大学课堂检测、课后作业、诊断与强化练习系统',
         theme_color: '#0b4a7f',
         background_color: '#f6f8fa',

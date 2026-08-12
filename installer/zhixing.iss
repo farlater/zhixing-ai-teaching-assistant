@@ -8,8 +8,8 @@
   #define MyAppVersion "0.1.0"
 #endif
 
-#define MyAppName "知行 AI 教学诊断"
-#define MyAppPublisher "知行教学诊断"
+#define MyAppName "辽科智学"
+#define MyAppPublisher "辽宁科技大学教学诊断"
 
 [Setup]
 AppId={{A4B5271B-C037-4D5F-8D45-5B0C9E612A8B}
@@ -26,7 +26,7 @@ SolidCompression=yes
 WizardStyle=modern
 DisableProgramGroupPage=yes
 OutputDir={#OutputDir}
-OutputBaseFilename=ZhixingAI-Windows-Setup-{#MyAppVersion}
+OutputBaseFilename=LiaokeZhixue-Windows-Setup-{#MyAppVersion}
 UninstallDisplayName={#MyAppName}
 CloseApplications=force
 RestartApplications=no
@@ -43,14 +43,18 @@ Name: "{app}\app\data"; Permissions: users-full
 Name: "{app}\app\uploads"; Permissions: users-full
 
 [Icons]
-Name: "{autodesktop}\知行 AI 教学诊断"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\Start-Zhixing.ps1"""; WorkingDir: "{app}\app"; IconFilename: "{sys}\shell32.dll"; IconIndex: 220
-Name: "{group}\启动知行 AI 教学诊断"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\Start-Zhixing.ps1"""; WorkingDir: "{app}\app"
+Name: "{autodesktop}\辽科智学"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\Start-Zhixing.ps1"""; WorkingDir: "{app}\app"; IconFilename: "{sys}\shell32.dll"; IconIndex: 220
+Name: "{group}\启动辽科智学"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\Start-Zhixing.ps1"""; WorkingDir: "{app}\app"
 Name: "{group}\配置 AI 服务"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Configure-Zhixing.ps1"""; WorkingDir: "{app}\app"
 Name: "{group}\停止本地服务"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Stop-Zhixing.ps1"""; WorkingDir: "{app}"
 
 [Run]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Configure-Firewall.ps1"" -NodePath ""{app}\runtime\node.exe"" -Port 4173"; Description: "允许学生手机通过局域网访问"; Flags: waituntilterminated postinstall skipifsilent
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\Start-Zhixing.ps1"""; Description: "启动知行 AI 教学诊断"; Flags: nowait postinstall skipifsilent
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\Start-Zhixing.ps1"""; Description: "启动辽科智学"; Flags: nowait postinstall skipifsilent
+
+[InstallDelete]
+Type: files; Name: "{autodesktop}\知行 AI 教学诊断.lnk"
+Type: filesandordirs; Name: "{userprograms}\知行 AI 教学诊断"
 
 [UninstallRun]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Stop-Zhixing.ps1"""; Flags: runhidden waituntilterminated skipifdoesntexist

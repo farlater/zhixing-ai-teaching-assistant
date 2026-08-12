@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">辽科知行课堂</string>
-    <string name="toolbar_title">辽宁科技大学 · 知行课堂</string>
+    <string name="app_name">辽科智学</string>
+    <string name="toolbar_title">辽宁科技大学 · 辽科智学</string>
     <string name="connection_settings">连接设置</string>
     <string name="teacher_address">教师电脑地址</string>
     <string name="teacher_address_hint">例如：http://192.168.137.1:4173</string>

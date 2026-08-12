@@ -172,13 +172,15 @@ try {
   if (-not $SkipShortcuts) {
     Write-Step '创建桌面和开始菜单快捷方式'
     $desktop = [Environment]::GetFolderPath('Desktop')
-    $startMenu = Join-Path ([Environment]::GetFolderPath('Programs')) '知行 AI 教学诊断'
+    $startMenu = Join-Path ([Environment]::GetFolderPath('Programs')) '辽科智学'
     New-Item -ItemType Directory -Force -Path $startMenu | Out-Null
-    New-ApplicationShortcut -ShortcutPath (Join-Path $desktop '知行 AI 教学诊断.lnk') -ScriptPath (Join-Path $installRoot 'Start-Zhixing.ps1') -Arguments '-WindowStyle Hidden' -WorkingDirectory $appRoot
-    New-ApplicationShortcut -ShortcutPath (Join-Path $startMenu '启动知行 AI 教学诊断.lnk') -ScriptPath (Join-Path $installRoot 'Start-Zhixing.ps1') -Arguments '-WindowStyle Hidden' -WorkingDirectory $appRoot
+    Remove-Item -LiteralPath (Join-Path $desktop '知行 AI 教学诊断.lnk') -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('Programs')) '知行 AI 教学诊断') -Recurse -Force -ErrorAction SilentlyContinue
+    New-ApplicationShortcut -ShortcutPath (Join-Path $desktop '辽科智学.lnk') -ScriptPath (Join-Path $installRoot 'Start-Zhixing.ps1') -Arguments '-WindowStyle Hidden' -WorkingDirectory $appRoot
+    New-ApplicationShortcut -ShortcutPath (Join-Path $startMenu '启动辽科智学.lnk') -ScriptPath (Join-Path $installRoot 'Start-Zhixing.ps1') -Arguments '-WindowStyle Hidden' -WorkingDirectory $appRoot
     New-ApplicationShortcut -ShortcutPath (Join-Path $startMenu '配置 AI 服务.lnk') -ScriptPath (Join-Path $installRoot 'Configure-Zhixing.ps1') -Arguments '' -WorkingDirectory $appRoot
     New-ApplicationShortcut -ShortcutPath (Join-Path $startMenu '停止本地服务.lnk') -ScriptPath (Join-Path $installRoot 'Stop-Zhixing.ps1') -Arguments '' -WorkingDirectory $appRoot
-    New-ApplicationShortcut -ShortcutPath (Join-Path $startMenu '卸载知行 AI 教学诊断.lnk') -ScriptPath (Join-Path $installRoot 'Uninstall-Zhixing.ps1') -Arguments '' -WorkingDirectory $installRoot
+    New-ApplicationShortcut -ShortcutPath (Join-Path $startMenu '卸载辽科智学.lnk') -ScriptPath (Join-Path $installRoot 'Uninstall-Zhixing.ps1') -Arguments '' -WorkingDirectory $installRoot
   }
 
   if (-not $SkipFirewall) {
@@ -193,7 +195,7 @@ try {
   }
 
   if (-not $SkipLaunch) {
-    Write-Step '启动知行 AI 教学诊断'
+    Write-Step '启动辽科智学'
     & (Join-Path $installRoot 'Start-Zhixing.ps1') -AppRoot $appRoot -InstallRoot $installRoot
   }
   Write-Host "`n安装完成。教师端：http://127.0.0.1:4173/teacher" -ForegroundColor Green
