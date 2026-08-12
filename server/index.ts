@@ -1271,7 +1271,7 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
 
 syncKnowledgeBase(store.read())
 app.listen(port, '0.0.0.0', () => {
-  console.log(`知行教学诊断服务已启动：http://localhost:${port}`)
+  console.log(`辽科智学服务已启动：http://localhost:${port}`)
   for (const address of lanAddresses(port)) console.log(`局域网访问：${address}`)
 })
 

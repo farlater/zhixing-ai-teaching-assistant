@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title 知行 AI 教学诊断
+title 辽科智学
 
 where node >nul 2>nul
 if errorlevel 1 (
@@ -37,7 +37,7 @@ if not exist dist\index.html (
   )
 )
 
-echo [3/3] 正在启动知行教学诊断...
+echo [3/3] 正在启动辽科智学...
 echo 教师端: http://localhost:4173/teacher
 echo 请保持本窗口开启。
 call pnpm start

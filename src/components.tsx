@@ -78,7 +78,7 @@ export function TeacherLayout() {
   }
   return <div className="app-shell">
     <aside className={`sidebar ${open ? 'open' : ''}`}>
-      <div className="brand"><div className="brand-mark school-mark"><img src="/ustl-emblem.jpg" alt="辽宁科技大学校徽" /></div><div><strong>知行</strong><span>辽宁科技大学 · 教学诊断</span></div></div>
+      <div className="brand"><div className="brand-mark school-mark"><img src="/ustl-emblem.jpg" alt="辽宁科技大学校徽" /></div><div><strong>辽科智学</strong><span>辽宁科技大学 · 教学诊断</span></div></div>
       <nav>{nav.map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/teacher'} onClick={() => setOpen(false)}><Icon size={19} /><span>{label}</span></NavLink>)}</nav>
       <div className="sidebar-foot"><span className="status-dot" /><div><strong>本地服务运行中</strong><small>数据保存在教师电脑</small></div></div>
     </aside>

@@ -1,7 +1,7 @@
 @echo off
 setlocal
 chcp 65001 >nul
-title 安装知行 AI 教学诊断
+title 安装辽科智学
 
 set "INSTALL_SCRIPT=%~dp0installer\Install-Zhixing.ps1"
 if not exist "%INSTALL_SCRIPT%" (
@@ -20,5 +20,5 @@ if errorlevel 1 (
 )
 
 echo.
-echo [安装完成] 桌面已创建“知行 AI 教学诊断”快捷方式。
+echo [安装完成] 桌面已创建“辽科智学”快捷方式。
 pause
