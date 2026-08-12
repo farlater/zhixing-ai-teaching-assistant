@@ -79,20 +79,30 @@ function createShowcaseData(db: Database, createdAt: string): { students: Studen
 }
 
 function applyShowcaseData(db: Database, createdAt = now()) {
-  const coursePlans = [
-    { courseId: 'course-fourbar', ids: ['q-fourbar-1', 'q-fourbar-2', 'q-fourbar-3'] },
-    { courseId: 'course-gear', ids: ['q-gear-1', 'q-gear-2', 'q-gear-3'] },
-    { courseId: 'course-structure', ids: ['q-structure-1', 'q-structure-2', 'q-structure-3', 'q-structure-photo'] }
+  // 演示用的 12 次历史记录采用教师提供教材目录中的章节名，避免三节当前课程
+  // 在趋势图里机械重复。题目本身只作为统计种子，不冒充已建设完成的全册题库。
+  const lessonPlans = [
+    { title: '机构的结构分析', courseId: 'course-structure', ids: ['q-structure-1', 'q-structure-2', 'q-structure-3'] },
+    { title: '平面机构的运动分析', courseId: 'course-fourbar', ids: ['q-fourbar-1', 'q-fourbar-2', 'q-fourbar-3'] },
+    { title: '平面机构的静力分析', courseId: 'course-structure', ids: ['q-structure-1', 'q-structure-2', 'q-structure-3'] },
+    { title: '机械的动力分析', courseId: 'course-gear', ids: ['q-gear-1', 'q-gear-2', 'q-gear-3'] },
+    { title: '机械的平衡', courseId: 'course-gear', ids: ['q-gear-1', 'q-gear-2', 'q-gear-3'] },
+    { title: '机械运转及速度波动调节', courseId: 'course-fourbar', ids: ['q-fourbar-1', 'q-fourbar-2', 'q-fourbar-3'] },
+    { title: '连杆机构及其设计', courseId: 'course-fourbar', ids: ['q-fourbar-1', 'q-fourbar-2', 'q-fourbar-3'] },
+    { title: '凸轮机构及其设计', courseId: 'course-structure', ids: ['q-structure-1', 'q-structure-2', 'q-structure-3'] },
+    { title: '齿轮机构及其设计', courseId: 'course-gear', ids: ['q-gear-1', 'q-gear-2', 'q-gear-3'] },
+    { title: '齿轮系及其设计', courseId: 'course-gear', ids: ['q-gear-1', 'q-gear-2', 'q-gear-3'] },
+    { title: '其他常用机构', courseId: 'course-structure', ids: ['q-structure-1', 'q-structure-2', 'q-structure-3'] },
+    { title: '机械系统的方案设计', courseId: 'course-structure', ids: ['q-structure-1', 'q-structure-2', 'q-structure-3', 'q-structure-photo'] }
   ]
-  const lessonNames = ['平面四杆机构的急回特性', '定轴轮系的传动比', '平面机构的组成与结构分析']
   const makeAssessment = (category: Assessment['category'], index: number): Assessment => {
-    const plan = coursePlans[index % coursePlans.length]
+    const plan = lessonPlans[index]
     const number = String(index + 1).padStart(2, '0')
     const isCurrent = category === 'classroom' && index === 11
     return {
       id: isCurrent ? 'assessment-structure' : `demo-${category}-${number}`,
       courseId: plan.courseId,
-      title: `第 ${index + 1} 次${category === 'classroom' ? '课堂检测' : '课后作业'} · ${lessonNames[index % lessonNames.length]}`,
+      title: `第 ${index + 1} 次${category === 'classroom' ? '课堂检测' : '课后作业'} · ${plan.title}`,
       description: category === 'classroom' ? '课堂即时诊断，题型一致并支持按学生分配不同题目。' : '课后巩固练习，独立统计并计入综合成绩。',
       joinCode: `${category === 'classroom' ? 'KT' : 'ZY'}${number}`,
       questionIds: plan.ids,
@@ -117,7 +127,7 @@ function applyShowcaseData(db: Database, createdAt = now()) {
   db.settings = {
     ...db.settings,
     demoShowcase: true,
-    demoSeedVersion: 8,
+    demoSeedVersion: 9,
     reportDiagnoses: {
       ...(db.settings?.reportDiagnoses || {}),
       'assessment-structure': {
@@ -181,7 +191,7 @@ function seed(): Database {
       { id: 'assessment-structure', courseId: 'course-structure', title: '平面机构结构分析 · 课堂即时诊断', description: '4 道图示题，包含 1 道可拍照提交的综合分析题。', joinCode: 'JG027', questionIds: structureQuestions.map(question => question.id), category: 'classroom', questionMode: 'fixed', status: 'published', timeLimit: 10, publishedAt: createdAt, createdAt }
     ],
     students: [], submissions: [], practices: [], videoProgress: [],
-    settings: { demoShowcase: true, demoSeedVersion: 8, network: { hotspotSsid: 'AI-Classroom', hotspotPassword: '12345678', preferredAddress: '' } }
+    settings: { demoShowcase: true, demoSeedVersion: 9, network: { hotspotSsid: 'AI-Classroom', hotspotPassword: '12345678', preferredAddress: 'http://192.168.137.1:4173' } }
   }
   applyShowcaseData(db, createdAt)
   return db
@@ -196,7 +206,7 @@ function migrateShowcaseData(db: Database) {
       if (assessment.status === 'published' && assessment.id !== current.id) assessment.status = 'closed'
     })
   }
-  if ((db.settings?.demoSeedVersion || 0) < 8) {
+  if ((db.settings?.demoSeedVersion || 0) < 9) {
     const curated = seed()
     curated.questions.forEach(question => {
       const current = db.questions.find(item => item.id === question.id)
@@ -215,7 +225,7 @@ export class JsonStore {
     if (fs.existsSync(DB_PATH)) {
       try {
         this.data = JSON.parse(fs.readFileSync(DB_PATH, 'utf8')) as Database
-        if ((this.data.settings?.demoSeedVersion || 0) < 8) {
+        if ((this.data.settings?.demoSeedVersion || 0) < 9) {
           migrateShowcaseData(this.data)
           this.save()
         }

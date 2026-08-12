@@ -2,16 +2,14 @@ import os from 'node:os'
 import { spawn } from 'node:child_process'
 
 export function lanAddresses(port: number) {
-  const addresses = Object.values(os.networkInterfaces()).flat().filter(item => item?.family === 'IPv4' && !item.internal).map(item => item!.address)
-  const priority = (address: string) => {
-    if (address === '192.168.137.1') return 100
-    if (address.startsWith('192.168.')) return 80
-    if (address.startsWith('10.')) return 70
-    if (/^172\.(1[6-9]|2\d|3[01])\./.test(address)) return 60
-    if (address.startsWith('169.254.')) return 0
-    return 20
-  }
-  return [...new Set(addresses)].sort((a, b) => priority(b) - priority(a)).map(address => `http://${address}:${port}`)
+  // Windows 移动热点使用的主机地址固定为 192.168.137.1。教师电脑通常还会有
+  // 家庭 Wi-Fi、VPN、虚拟机等网卡，把这些地址写入二维码会造成手机偶发连错。
+  // 即使热点尚未开启，也只发布这个稳定地址，让教师先开热点、学生再扫码。
+  if (process.platform === 'win32') return [`http://192.168.137.1:${port}`]
+  const addresses = Object.values(os.networkInterfaces()).flat()
+    .filter(item => item?.family === 'IPv4' && !item.internal && !item.address.startsWith('169.254.'))
+    .map(item => item!.address)
+  return [...new Set(addresses)].map(address => `http://${address}:${port}`)
 }
 
 export function isLoopback(address?: string) {

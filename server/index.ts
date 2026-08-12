@@ -7,14 +7,14 @@ import { store } from './store.js'
 import { asyncRoute, id, loadEnv, now } from './utils.js'
 import { extractMaterial } from './materials.js'
 import { extractWithMinerU, mineruReady, mineruSupports } from './mineru.js'
-import { generateQuestions, gradeSubjective, extractAnswerFromImage, teacherAssistant, teacherAssistantStream, describeInstructionalImage, bailianReady, generateClassDiagnosis, generatePracticeQuestion } from './ai.js'
-import { programGrade } from './grading.js'
+import { generateQuestions, generateQuestionVariants, gradeSubjective, extractAnswerFromImage, teacherAssistant, teacherAssistantStream, describeInstructionalImage, bailianReady, generateClassDiagnosis, generatePracticeQuestion } from './ai.js'
+import { heuristicSubjectiveGrade, programGrade } from './grading.js'
 import { buildClassReport, buildStudentProfile, buildStudentRanking } from './reports.js'
 import { questionBank } from './questionBank.js'
 import { transcribeAudio } from './speech.js'
 import { buildRetrievedContext, knowledgeRoot, syncKnowledgeBase } from './knowledgeBase.js'
 import { isLoopback, lanAddresses, openWindowsHotspotSettings } from './network.js'
-import type { Assessment, Course, GenerateConfig, KnowledgePoint, Material, Question, Student, Submission } from '../shared/types.js'
+import type { AnswerResult, Assessment, Course, GenerateConfig, KnowledgePoint, Material, Question, Student, Submission } from '../shared/types.js'
 
 loadEnv()
 const app = express()
@@ -101,7 +101,8 @@ app.patch('/api/settings/ai', (req, res) => {
 app.get('/api/network', (_req, res) => {
   const settings = store.read().settings?.network || { hotspotSsid: '', hotspotPassword: '' }
   const addresses = lanAddresses(port)
-  res.json({ ...settings, addresses, preferredAddress: settings.preferredAddress || addresses[0] || `http://localhost:${port}`, studentPath: '/join' })
+  const preferredAddress = addresses[0] || `http://localhost:${port}`
+  res.json({ ...settings, addresses, preferredAddress, studentPath: '/join' })
 })
 
 app.patch('/api/network', (req, res) => {
@@ -142,6 +143,7 @@ app.get('/api/courses', (_req, res) => {
     ...course,
     knowledgePoints: db.knowledgePoints.filter(point => point.courseId === course.id),
     materials: db.materials.filter(material => material.courseId === course.id),
+    questions: db.questions.filter(question => question.courseId === course.id && question.status === 'confirmed'),
     questionCount: db.questions.filter(question => question.courseId === course.id).length,
     assessmentCount: db.assessments.filter(assessment => assessment.courseId === course.id).length
   })))
@@ -384,17 +386,69 @@ app.get('/api/questions', (req, res) => {
   res.json(db.questions.filter(question => !courseId || question.courseId === courseId))
 })
 
+app.post('/api/courses/:courseId/questions', upload.single('image'), (req, res) => {
+  const db = store.read()
+  const course = db.courses.find(item => item.id === req.params.courseId)
+  if (!course) {
+    if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path)
+    return res.status(404).json({ error: '课程不存在' })
+  }
+  const knowledgePointId = String(req.body.knowledgePointId || '')
+  const type = String(req.body.type || 'single') as Question['type']
+  const stemText = String(req.body.stem || '').trim()
+  if (!db.knowledgePoints.some(point => point.id === knowledgePointId && point.courseId === course.id) || !stemText) {
+    if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path)
+    return res.status(400).json({ error: '请完整填写知识点和题干' })
+  }
+  const options = String(req.body.options || '').split(/\r?\n/).map((item: string) => item.trim()).filter(Boolean)
+  const rawAnswer = String(req.body.answer || '').trim()
+  const answer = type === 'multiple' ? rawAnswer.split(/[,，、\s]+/).filter(Boolean).map(item => item.toUpperCase()) : rawAnswer
+  const imageMarkdown = req.file ? `![题库配图](/uploads/${path.basename(req.file.path).replace(/\\/g, '/')})\n\n` : ''
+  const question: Question = {
+    id: id('q-bank'), courseId: course.id, knowledgePointId, type,
+    difficulty: ['基础', '进阶', '挑战'].includes(req.body.difficulty) ? req.body.difficulty : '进阶',
+    stem: `${imageMarkdown}${stemText}`, options: ['single', 'multiple', 'truefalse'].includes(type) ? options : undefined,
+    answer, explanation: String(req.body.explanation || ''), rubric: String(req.body.rubric || '') || undefined,
+    formula: String(req.body.formula || '') || undefined, maxScore: Math.max(1, Number(req.body.maxScore) || 10),
+    abilities: ['概念理解', '公式应用'], source: 'bank', status: 'confirmed', createdAt: now()
+  }
+  if (!rawAnswer || ((type === 'single' || type === 'multiple') && options.length < 2)) {
+    if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path)
+    return res.status(400).json({ error: '请填写参考答案；选择题至少需要两个选项' })
+  }
+  store.update(data => data.questions.push(question))
+  syncKnowledgeBase(store.read(), course.id)
+  res.status(201).json(question)
+})
+
 app.post('/api/questions/generate', asyncRoute(async (req, res) => {
   const config = req.body as GenerateConfig
   if (!config.courseId || !config.knowledgePointIds?.length || !config.types?.length || config.count < 1 || config.count > 20) return res.status(400).json({ error: '请完整选择知识点、题型和题量（1–20）' })
   const db = store.read()
   let bankQuestions: Question[] = []
-  if (config.source === 'bank' || config.source === 'mixed') bankQuestions = await questionBank.search(config)
+  if (config.source === 'bank' || config.source === 'mixed') {
+    const selectedIds = new Set(config.bankQuestionIds || [])
+    const hasExplicitSelection = Array.isArray(config.bankQuestionIds)
+    bankQuestions = db.questions.filter(question => question.courseId === config.courseId && question.status === 'confirmed' &&
+      question.source === 'bank' && config.knowledgePointIds.includes(question.knowledgePointId) && config.types.includes(question.type) &&
+      (!hasExplicitSelection || selectedIds.has(question.id)))
+    if (bankQuestions.length < config.count) {
+      const external = await questionBank.search(config)
+      const known = new Set(bankQuestions.map(question => question.id))
+      bankQuestions.push(...external.filter(question => !known.has(question.id)))
+    }
+  }
+  if (config.source === 'mixed' && config.mixedMode === 'numeric-variant') {
+    const variants = await generateQuestionVariants(config, db, bankQuestions)
+    store.update(data => data.questions.push(...variants))
+    return res.status(201).json(variants)
+  }
+  bankQuestions = bankQuestions.slice(0, config.count)
   const remaining = Math.max(0, config.count - bankQuestions.length)
   const aiQuestions = remaining && config.source !== 'bank' ? await generateQuestions({ ...config, count: remaining }, db) : []
   const questions = [...bankQuestions, ...aiQuestions]
-  if (!questions.length && config.source === 'bank') return res.status(409).json({ error: '题库接口已保留，但当前尚未配置题库数据源。请选择 AI 出题或混合模式。' })
-  store.update(data => data.questions.push(...questions))
+  if (!questions.length && config.source === 'bank') return res.status(409).json({ error: '当前筛选条件下没有可用题库题目，请先在“课程与资料”中添加题目。' })
+  if (aiQuestions.length) store.update(data => data.questions.push(...aiQuestions))
   res.status(201).json(questions)
 }))
 
@@ -406,6 +460,20 @@ app.patch('/api/questions/:id', (req, res) => {
   })
   if (!updated) return res.status(404).json({ error: '题目不存在' })
   res.json(updated)
+})
+
+app.delete('/api/questions/:id', (req, res) => {
+  const db = store.read()
+  const question = db.questions.find(item => item.id === req.params.id)
+  if (!question) return res.status(404).json({ error: '题目不存在' })
+  if (db.assessments.some(assessment => assessment.questionIds.includes(question.id))) return res.status(409).json({ error: '该题已被教学任务使用，不能直接删除' })
+  for (const match of question.stem.matchAll(/\/uploads\/([^\s)]+)/g)) {
+    const target = path.resolve(uploadDir, match[1].replace(/\//g, path.sep))
+    if (target.startsWith(`${uploadDir}${path.sep}`) && fs.existsSync(target)) fs.unlinkSync(target)
+  }
+  store.update(data => { data.questions = data.questions.filter(item => item.id !== question.id) })
+  syncKnowledgeBase(store.read(), question.courseId)
+  res.status(204).end()
 })
 
 app.post('/api/questions/confirm', (req, res) => {
@@ -548,22 +616,54 @@ app.post('/api/submissions', asyncRoute(async (req, res) => {
   if (!assessment || assessment.status !== 'published') return res.status(409).json({ error: '课堂未发布或已经结束' })
   const assignedQuestions = resolveAssessmentQuestions(db, assessment, studentId)
   const assignedIds = new Set(assignedQuestions.map(question => question.id))
-  const results = []
+  const results: AnswerResult[] = []
+  const aiJobs: { index: number; question: Question; answer: string | string[] }[] = []
   for (const input of answers || []) {
     const question = db.questions.find(item => item.id === input.questionId)
     if (!question || !assignedIds.has(question.id)) continue
     const actualAnswer = input.extractedText || input.answer || ''
-    const graded = programGrade(question, actualAnswer) || await gradeSubjective(question, actualAnswer)
+    const programmed = programGrade(question, actualAnswer)
+    const graded = programmed || heuristicSubjectiveGrade(question, actualAnswer)
+    if (!programmed && bailianReady()) aiJobs.push({ index: results.length, question, answer: actualAnswer })
     results.push({ ...graded, answer: input.answer, imageUrl: input.imageUrl, extractedText: input.extractedText })
   }
   const maxScore = assignedQuestions.reduce((sum, question) => sum + question.maxScore, 0)
-  const submission: Submission = { id: id('submission'), assessmentId, studentId, answers: results, totalScore: results.reduce((sum, result) => sum + result.score, 0), maxScore, status: 'completed', submittedAt: now() }
+  const submission: Submission = { id: id('submission'), assessmentId, studentId, answers: results, totalScore: results.reduce((sum, result) => sum + result.score, 0), maxScore, status: aiJobs.length ? 'grading' : 'completed', submittedAt: now() }
   store.update(data => {
     data.submissions = data.submissions.filter(item => !(item.assessmentId === assessmentId && item.studentId === studentId))
     data.submissions.push(submission)
   })
-  syncKnowledgeBase(store.read(), assessment.courseId)
-  res.status(201).json({ ...submission, questions: assignedQuestions, tutorialVideos: tutorialVideosFor(db, assignedQuestions) })
+  // 手机不再长时间保持一次 HTTP 请求等待 DeepSeek。先保存客观题和规则评分，
+  // 主观题在教师电脑后台完成；学生端轮询同一提交记录取得最终诊断。
+  res.status(aiJobs.length ? 202 : 201).json({ ...submission, questions: assignedQuestions, tutorialVideos: tutorialVideosFor(db, assignedQuestions) })
+  if (!aiJobs.length) {
+    setImmediate(() => syncKnowledgeBase(store.read(), assessment.courseId))
+    return
+  }
+  const startedAt = Date.now()
+  console.log(`[诊断] 已接收提交 ${submission.id}，后台评分 ${aiJobs.length} 道主观题`)
+  void Promise.all(aiJobs.map(async job => ({ ...job, result: await gradeSubjective(job.question, job.answer) }))).then(completed => {
+    store.update(data => {
+      const current = data.submissions.find(item => item.id === submission.id)
+      if (!current) return
+      for (const item of completed) current.answers[item.index] = {
+        ...item.result,
+        answer: current.answers[item.index]?.answer ?? item.result.answer,
+        imageUrl: current.answers[item.index]?.imageUrl,
+        extractedText: current.answers[item.index]?.extractedText
+      }
+      current.totalScore = current.answers.reduce((sum, answer) => sum + answer.score, 0)
+      current.status = 'completed'
+    })
+    console.log(`[诊断] 提交 ${submission.id} 评分完成，用时 ${Date.now() - startedAt}ms`)
+    syncKnowledgeBase(store.read(), assessment.courseId)
+  }).catch(error => {
+    store.update(data => {
+      const current = data.submissions.find(item => item.id === submission.id)
+      if (current) current.status = 'completed'
+    })
+    console.error(`[诊断] 提交 ${submission.id} 后台评分异常，已保留规则诊断`, error)
+  })
 }))
 
 app.get('/api/submissions/:assessmentId/:studentId', (req, res) => {

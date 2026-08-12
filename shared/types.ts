@@ -175,6 +175,8 @@ export interface GenerateConfig {
   types: QuestionType[]
   difficulty: Difficulty
   source: 'ai' | 'bank' | 'mixed'
+  bankQuestionIds?: string[]
+  mixedMode?: 'supplement' | 'numeric-variant'
 }
 
 export interface ClassReport {
