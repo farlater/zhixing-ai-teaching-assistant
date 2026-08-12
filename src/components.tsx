@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { BookOpen, ChartNoAxesCombined, ClipboardCheck, FileQuestion, KeyRound, LayoutDashboard, Menu, MessageCircleMore, Settings, Users, X, Wifi } from 'lucide-react'
+import { BookOpen, ChartNoAxesCombined, ClipboardCheck, FileQuestion, KeyRound, LayoutDashboard, Menu, MessageCircleMore, Settings, Users, X, Wifi, WifiOff } from 'lucide-react'
 import { api } from './api'
 
 export function Spinner({ label = '正在加载' }: { label?: string }) {
@@ -49,8 +49,23 @@ export function TeacherLayout() {
   const [configOpen, setConfigOpen] = useState(false)
   const [config, setConfig] = useState<{ bailianConfigured: boolean; mineruConfigured: boolean; baseUrl: string; textModel: string; visionModel: string; asrModel: string }>()
   const [configMessage, setConfigMessage] = useState('')
+  const [online, setOnline] = useState<boolean>()
   const location = useLocation()
   const current = pageNames[location.pathname] || pageNames['/teacher']
+  useEffect(() => {
+    let active = true
+    const refreshConnectivity = async () => {
+      try {
+        const result = await api<{ online: boolean }>('/api/connectivity')
+        if (active) setOnline(result.online)
+      } catch {
+        if (active) setOnline(false)
+      }
+    }
+    void refreshConnectivity()
+    const timer = window.setInterval(refreshConnectivity, 30000)
+    return () => { active = false; window.clearInterval(timer) }
+  }, [])
   async function openAiConfig() {
     setConfig(await api('/api/settings/ai'))
     setConfigOpen(true)
@@ -69,7 +84,7 @@ export function TeacherLayout() {
     </aside>
     {open && <div className="sidebar-mask" onClick={() => setOpen(false)} />}
     <main className="main-area">
-      <header className="topbar"><button className="mobile-menu" onClick={() => setOpen(true)}><Menu /></button><div><h1>{current.title}</h1>{current.subtitle && <p>{current.subtitle}</p>}</div><div className="top-actions"><div className="network-pill" title="教师端服务已启动；热点与防火墙状态请在课堂检测页确认"><Wifi size={15} />局域网服务</div><button className="icon-btn" title="配置 AI 服务" onClick={() => void openAiConfig()}><Settings size={17} /></button><div className="avatar" title="教师端">教</div></div></header>
+      <header className="topbar"><button className="mobile-menu" onClick={() => setOpen(true)}><Menu /></button><div><h1>{current.title}</h1>{current.subtitle && <p>{current.subtitle}</p>}</div><div className="top-actions"><div className={`network-pill ${online === false ? 'offline' : ''}`} title="教师电脑外网连接状态">{online === false ? <WifiOff size={15} /> : <Wifi size={15} />}{online === undefined ? '检测中' : online ? '已联网' : '未联网'}</div><button className="icon-btn" title="配置 AI 服务" onClick={() => void openAiConfig()}><Settings size={17} /></button><div className="avatar" title="教师端">教</div></div></header>
       <div className="page"><Outlet /></div>
     </main>
     {configOpen && config && <Modal title="AI 服务配置" onClose={() => setConfigOpen(false)}><form className="form" onSubmit={saveConfig}><div className="config-state"><span><i className={`status-dot ${config.bailianConfigured ? '' : 'demo'}`} />百炼 {config.bailianConfigured ? '已配置' : '未配置'}</span><span><i className={`status-dot ${config.mineruConfigured ? '' : 'demo'}`} />MinerU {config.mineruConfigured ? '已配置' : '未配置'}</span></div><label>百炼 API Key<input type="password" name="DASHSCOPE_API_KEY" placeholder={config.bailianConfigured ? '已保存；留空则不修改' : 'sk-…'} /></label><label>MinerU API Token<input type="password" name="MINERU_API_TOKEN" placeholder={config.mineruConfigured ? '已保存；留空则不修改' : '请输入 MinerU Token'} /></label><details className="advanced-config"><summary>模型与接口</summary><label>百炼兼容接口<input name="BAILIAN_BASE_URL" defaultValue={config.baseUrl} /></label><label>文本模型<input name="BAILIAN_TEXT_MODEL" defaultValue={config.textModel} /></label><label>视觉模型<input name="BAILIAN_VISION_MODEL" defaultValue={config.visionModel} /></label><label>语音识别模型<input name="BAILIAN_ASR_MODEL" defaultValue={config.asrModel} /></label></details><div className="modal-actions"><button type="button" className="btn" onClick={() => setConfigOpen(false)}>取消</button><button className="btn primary"><KeyRound size={16} />保存配置</button></div></form></Modal>}

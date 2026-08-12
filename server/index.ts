@@ -97,6 +97,22 @@ app.get('/api/health', (_req, res) => {
   })
 })
 
+let connectivityCache = { online: false, checkedAt: '', expiresAt: 0 }
+app.get('/api/connectivity', asyncRoute(async (_req, res) => {
+  if (Date.now() < connectivityCache.expiresAt) return res.json(connectivityCache)
+  const targets = [
+    new URL(process.env.BAILIAN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1').origin,
+    new URL(process.env.MINERU_API_BASE || 'https://mineru.net/api/v4').origin,
+  ]
+  const attempts = targets.map(async target => {
+    const response = await fetch(target, { method: 'HEAD', signal: AbortSignal.timeout(3500) })
+    return response.status > 0
+  })
+  const online = await Promise.any(attempts).catch(() => false)
+  connectivityCache = { online, checkedAt: now(), expiresAt: Date.now() + 15000 }
+  res.json(connectivityCache)
+}))
+
 app.get('/api/settings/ai', (req, res) => {
   if (!isLoopback(req.socket.remoteAddress)) return res.status(403).json({ error: 'AI 配置只允许在教师电脑本机修改' })
   res.json({
