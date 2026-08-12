@@ -79,6 +79,40 @@ export async function chat(messages: ChatMessage[], options?: { json?: boolean; 
   return data.choices?.[0]?.message?.content || ''
 }
 
+export async function streamChat(messages: ChatMessage[], onDelta: (text: string) => void, options?: { temperature?: number; model?: string; maxTokens?: number }) {
+  const key = process.env.DASHSCOPE_API_KEY
+  if (!key) throw new Error('BAILIAN_NOT_CONFIGURED')
+  const base = (process.env.BAILIAN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1').replace(/\/$/, '')
+  const model = options?.model || process.env.BAILIAN_TEXT_MODEL || 'deepseek-v4-flash'
+  const response = await fetch(`${base}/chat/completions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+    body: JSON.stringify({ model, messages, stream: true, temperature: options?.temperature ?? .25, max_tokens: options?.maxTokens || 4096 }),
+    signal: AbortSignal.timeout(90000)
+  })
+  if (!response.ok) throw new Error(`百炼模型请求失败：${response.status} ${await response.text()}`)
+  if (!response.body) throw new Error('百炼模型没有返回可读取的数据流')
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { value, done } = await reader.read()
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
+    const lines = buffer.split(/\r?\n/)
+    buffer = lines.pop() || ''
+    for (const line of lines) {
+      const payload = line.trim().replace(/^data:\s*/, '')
+      if (!payload || payload === '[DONE]') continue
+      try {
+        const data = JSON.parse(payload) as { choices?: { delta?: { content?: string }; message?: { content?: string } }[] }
+        const delta = data.choices?.[0]?.delta?.content || data.choices?.[0]?.message?.content || ''
+        if (delta) onDelta(delta)
+      } catch { /* 忽略心跳或非 JSON 的 SSE 行 */ }
+    }
+    if (done) break
+  }
+}
+
 function fallbackQuestion(config: GenerateConfig, db: Database, index: number): Question {
   const points = db.knowledgePoints.filter(point => config.knowledgePointIds.includes(point.id))
   const point = points[index % Math.max(points.length, 1)] || db.knowledgePoints.find(item => item.courseId === config.courseId)
@@ -165,6 +199,23 @@ export async function teacherAssistant(message: string, db: Database, report?: C
   const hardest = [...report.questionStats].sort((a, b) => a.accuracy - b.accuracy)[0]
   const attention = report.students.filter(student => student.rate < 60)
   return `从本次 ${report.submittedCount} 份作答看，班级整体掌握度为 ${report.accuracy}%。最需要回讲的是“${weakest?.name}”（${weakest?.value}%）；第 ${hardest?.index} 题正确率最低，为 ${hardest?.accuracy}%。建议先用 3 分钟让学生复述核心概念，再展示一道典型错例，最后安排一题同构变式。${attention.length ? `需要重点关注：${attention.map(item => item.name).join('、')}。` : ''}`
+}
+
+export async function teacherAssistantStream(message: string, db: Database, report: ClassReport | null | undefined, retrievedContext: string, globalPrompt: string, onDelta: (text: string) => void) {
+  const context = report ? JSON.stringify({
+    title: report.assessment.title, category: report.assessment.category, submittedCount: report.submittedCount,
+    averageScore: report.averageScore, accuracy: report.accuracy, knowledgeMastery: report.knowledgeMastery,
+    questionStats: report.questionStats, students: report.students.slice(0, 15)
+  }) : '{}'
+  if (bailianReady()) {
+    await streamChat([
+      { role: 'system', content: `${globalPrompt || '你是教师的教学诊断助教。'}\n\n检索到的课程知识文件：\n${retrievedContext || '暂无匹配文件'}\n\n当前教学任务统计快照：\n${context}` },
+      { role: 'user', content: message }
+    ], onDelta, { temperature: .25 })
+    return
+  }
+  const fallback = await teacherAssistant(message, db, report, retrievedContext, globalPrompt)
+  for (const part of fallback.match(/.{1,12}/gs) || [fallback]) onDelta(part)
 }
 
 export async function generateClassDiagnosis(report: ClassReport): Promise<ReportDiagnosis> {

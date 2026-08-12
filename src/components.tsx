@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { BookOpen, ChartNoAxesCombined, ClipboardCheck, FileQuestion, GraduationCap, KeyRound, LayoutDashboard, Menu, MessageCircleMore, Settings, Users, X, Wifi } from 'lucide-react'
+import { BookOpen, ChartNoAxesCombined, ClipboardCheck, FileQuestion, KeyRound, Landmark, LayoutDashboard, Menu, MessageCircleMore, Settings, Users, X, Wifi } from 'lucide-react'
 import { api } from './api'
 
 export function Spinner({ label = '正在加载' }: { label?: string }) {
@@ -29,7 +29,7 @@ export function Toast({ message, type = 'success', onDone }: { message: string; 
 
 const nav = [
   ['/teacher', '课堂总览', LayoutDashboard], ['/teacher/courses', '课程与资料', BookOpen],
-  ['/teacher/questions', '题目生成', FileQuestion], ['/teacher/classes', '课堂检测', ClipboardCheck],
+  ['/teacher/questions', '题目生成', FileQuestion], ['/teacher/classes', '教学任务', ClipboardCheck],
   ['/teacher/reports', '学情报告', ChartNoAxesCombined], ['/teacher/students', '学生画像', Users],
   ['/teacher/assistant', '教学助教', MessageCircleMore]
 ] as const
@@ -38,7 +38,7 @@ const pageNames: Record<string, { title: string; subtitle: string }> = {
   '/teacher': { title: '课堂总览', subtitle: '' },
   '/teacher/courses': { title: '课程与资料', subtitle: '知识点和课堂资料将共同约束 AI 出题。' },
   '/teacher/questions': { title: '题目生成', subtitle: '设置教学目标，生成并确认课堂诊断题。' },
-  '/teacher/classes': { title: '课堂检测', subtitle: '发布课堂，实时查看学生加入与提交情况。' },
+  '/teacher/classes': { title: '教学任务', subtitle: '分别管理课堂检测与课后作业。' },
   '/teacher/reports': { title: '学情报告', subtitle: '从真实作答数据中发现共性问题与个体差异。' },
   '/teacher/students': { title: '学生画像', subtitle: '持续记录表现，观察能力与知识点的变化。' },
   '/teacher/assistant': { title: '教学助教', subtitle: '基于当前课堂数据，获得具体可执行的教学建议。' }
@@ -63,7 +63,7 @@ export function TeacherLayout() {
   }
   return <div className="app-shell">
     <aside className={`sidebar ${open ? 'open' : ''}`}>
-      <div className="brand"><div className="brand-mark"><GraduationCap size={23} /></div><div><strong>知行</strong><span>教学诊断</span></div></div>
+      <div className="brand"><div className="brand-mark school-mark"><Landmark size={22} /></div><div><strong>知行</strong><span>辽宁科技大学 · 教学诊断</span></div></div>
       <nav>{nav.map(([to, label, Icon]) => <NavLink key={to} to={to} end={to === '/teacher'} onClick={() => setOpen(false)}><Icon size={19} /><span>{label}</span></NavLink>)}</nav>
       <div className="sidebar-foot"><span className="status-dot" /><div><strong>本地服务运行中</strong><small>数据保存在教师电脑</small></div></div>
     </aside>

@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import type { AnswerResult, Database, Diagnosis, Question, Student, Submission } from '../shared/types.js'
+import type { AnswerResult, Assessment, Database, Diagnosis, Question, Student, Submission } from '../shared/types.js'
 
 const DATA_DIR = path.resolve('data')
 const DB_PATH = path.join(DATA_DIR, 'db.json')
@@ -28,7 +28,7 @@ function diagnosisFor(correct: boolean, summary: string, errorType: string, sugg
   }
 }
 
-function createShowcaseData(createdAt: string): { students: Student[]; submissions: Submission[] } {
+function createShowcaseData(db: Database, createdAt: string): { students: Student[]; submissions: Submission[] } {
   const students = showcaseNames.map((name, index): Student => ({
     id: `demo-student-${String(index + 1).padStart(2, '0')}`,
     name,
@@ -36,64 +36,88 @@ function createShowcaseData(createdAt: string): { students: Student[]; submissio
     className: '机械2301班',
     createdAt
   }))
-  const submissions = students.map((student, index): Submission => {
-    const skill = (index * 37 + 23) % 100
-    const q1 = skill >= 16
-    const q2 = skill >= 34
-    const q3 = skill >= 47
-    const photoScore = skill >= 88 ? 16 : skill >= 74 ? 14 : skill >= 58 ? 12 : skill >= 42 ? 10 : skill >= 26 ? 7 : 4
-    const answers: AnswerResult[] = [
-      {
-        questionId: 'q-structure-1', answer: q1 ? 'B' : index % 2 ? 'A' : 'C', score: q1 ? 10 : 0, correct: q1,
-        diagnosis: diagnosisFor(q1, '基本杆组定义判断错误', '概念混淆', '结合 F=3n-2Pₗ=0，重新辨析“自由度为0且不可再拆”的定义。', '基本杆组识别', { 概念理解: q1 ? 92 : 48, 公式应用: q1 ? 88 : 55 })
-      },
-      {
-        questionId: 'q-structure-2', answer: q2 ? 'C' : index % 3 ? 'B' : 'D', score: q2 ? 10 : 0, correct: q2,
-        diagnosis: diagnosisFor(q2, '杆组级别判定环节出错', '级别判定错误', '先确认四构件六低副，再依据三副构件判断为Ⅲ级杆组。', '机构级别判定', { 概念理解: q2 ? 90 : 46, 公式应用: q2 ? 86 : 52 })
-      },
-      {
-        questionId: 'q-structure-3', answer: q3 ? 'C' : index % 2 ? 'B' : 'D', score: q3 ? 10 : 0, correct: q3,
-        diagnosis: diagnosisFor(q3, '更换原动件后的机构定级错误', '原动件变化分析错误', '分别标出两种原动件下可拆出的最高级杆组，再据此确定机构级别。', '机构结构分析', { 推理: q3 ? 91 : 43, 表达: q3 ? 86 : 58 })
-      },
-      {
-        questionId: 'q-structure-photo',
-        answer: photoScore >= 14
-          ? '滚子的自转属于局部自由度，左侧同一移动构件上的重复导路形成虚约束，右侧同轴处为复合铰链。去除局部自由度并扣除虚约束后，用 F=3n-2P_L-P_H 计算得 F=1；原动件数等于自由度时机构具有确定运动。高副低代时在两构件接触点公法线上引入一个虚拟构件和两个转动副。'
-          : '写出 F=3n-2P_L-P_H，并判断自由度为1；图中滚子处需要特殊处理，高副可用低副替代。',
-        extractedText: photoScore >= 14 ? '手写过程识别：指出局部自由度、虚约束和复合铰链；F=1；原动件数应等于自由度；画出两处高副低代。' : '手写过程识别：写出自由度公式与F=1，特殊结构辨识和高副低代步骤不完整。',
-        score: photoScore,
-        correct: photoScore >= 15,
-        diagnosis: diagnosisFor(photoScore >= 15, photoScore >= 12 ? '特殊结构辨识或高副低代说明不完整' : '自由度修正项存在缺漏', photoScore >= 12 ? '表达不完整' : '自由度计算疏漏', '按“标特殊结构—列修正后的自由度式—判断确定运动条件—完成两处高副低代”四步重新书写。', '自由度计算与高副低代', { 公式应用: Math.min(96, 54 + photoScore * 2.5), 推理: Math.min(94, 44 + photoScore * 2.7), 表达: Math.min(92, 40 + photoScore * 2.5) })
+  const submissions = students.flatMap((student, studentIndex) => db.assessments.map((assessment, assessmentIndex): Submission => {
+    const questions = assessment.questionIds.map(id => db.questions.find(question => question.id === id)).filter(Boolean) as Question[]
+    const round = Number(assessment.id.match(/(\d+)$/)?.[1] || 12) - 1
+    const baseline = 54 + ((studentIndex * 17 + 11) % 32)
+    const targetRate = Math.min(98, baseline + round * 1.15 + (assessment.category === 'homework' ? 4 : 0))
+    const answers = questions.map((question, questionIndex): AnswerResult => {
+      const marker = (studentIndex * 29 + round * 19 + questionIndex * 31 + (assessment.category === 'homework' ? 13 : 0)) % 100
+      const correct = marker < targetRate
+      const isSubjective = question.type === 'short' || question.type === 'blank'
+      const score = isSubjective
+        ? Math.max(2, Math.min(question.maxScore, Math.round(question.maxScore * (correct ? .86 + (marker % 10) / 100 : .36 + (marker % 25) / 100))))
+        : correct ? question.maxScore : 0
+      const concept = db.knowledgePoints.find(point => point.id === question.knowledgePointId)?.name || '本题知识点'
+      return {
+        questionId: question.id,
+        answer: correct ? question.answer : isSubjective ? '写出了主要公式，但判断条件和推导步骤不完整。' : ['A', 'B', 'C', 'D'][(studentIndex + questionIndex + round) % 4],
+        extractedText: isSubjective ? '手写答案识别：包含自由度公式与部分分析步骤，个别修正项说明不完整。' : undefined,
+        score,
+        correct: isSubjective ? score >= question.maxScore * .85 : correct,
+        diagnosis: diagnosisFor(correct, `${concept}的关键判断步骤存在遗漏`, isSubjective ? '步骤表达不完整' : '概念判断错误', `回看“${concept}”的判定条件，再完成一道同类型变式练习。`, concept, {
+          概念理解: Math.round(correct ? 82 + marker % 15 : 45 + marker % 22),
+          公式应用: Math.round(correct ? 80 + marker % 16 : 43 + marker % 24),
+          推理: Math.round(correct ? 78 + marker % 17 : 42 + marker % 25),
+          表达: Math.round(isSubjective ? 50 + score / question.maxScore * 45 : correct ? 86 : 58)
+        })
       }
-    ]
+    })
+    const baseTime = new Date(createdAt).getTime() - (11 - round) * 7 * 24 * 60 * 60 * 1000
     return {
-      id: `demo-submission-${String(index + 1).padStart(2, '0')}`,
-      assessmentId: 'assessment-structure',
+      id: `demo-submission-${assessment.id}-${String(studentIndex + 1).padStart(2, '0')}`,
+      assessmentId: assessment.id,
       studentId: student.id,
       answers,
       totalScore: answers.reduce((sum, answer) => sum + answer.score, 0),
-      maxScore: 46,
+      maxScore: questions.reduce((sum, question) => sum + question.maxScore, 0),
       status: 'completed',
-      submittedAt: new Date(new Date(createdAt).getTime() + index * 27000).toISOString()
+      submittedAt: new Date(baseTime + studentIndex * 27000 + assessmentIndex * 900).toISOString()
     }
-  })
+  }))
   return { students, submissions }
 }
 
 function applyShowcaseData(db: Database, createdAt = now()) {
-  const showcase = createShowcaseData(createdAt)
+  const coursePlans = [
+    { courseId: 'course-fourbar', ids: ['q-fourbar-1', 'q-fourbar-2', 'q-fourbar-3'] },
+    { courseId: 'course-gear', ids: ['q-gear-1', 'q-gear-2', 'q-gear-3'] },
+    { courseId: 'course-structure', ids: ['q-structure-1', 'q-structure-2', 'q-structure-3', 'q-structure-photo'] }
+  ]
+  const lessonNames = ['平面四杆机构的急回特性', '定轴轮系的传动比', '平面机构的组成与结构分析']
+  const makeAssessment = (category: Assessment['category'], index: number): Assessment => {
+    const plan = coursePlans[index % coursePlans.length]
+    const number = String(index + 1).padStart(2, '0')
+    const isCurrent = category === 'classroom' && index === 11
+    return {
+      id: isCurrent ? 'assessment-structure' : `demo-${category}-${number}`,
+      courseId: plan.courseId,
+      title: `第 ${index + 1} 次${category === 'classroom' ? '课堂检测' : '课后作业'} · ${lessonNames[index % lessonNames.length]}`,
+      description: category === 'classroom' ? '课堂即时诊断，题型一致并支持按学生分配不同题目。' : '课后巩固练习，独立统计并计入综合成绩。',
+      joinCode: `${category === 'classroom' ? 'KT' : 'ZY'}${number}`,
+      questionIds: plan.ids,
+      category,
+      questionMode: 'fixed',
+      questionCount: plan.ids.length,
+      status: isCurrent ? 'published' : 'closed',
+      timeLimit: category === 'classroom' ? 10 : 30,
+      publishedAt: isCurrent ? createdAt : undefined,
+      createdAt: new Date(new Date(createdAt).getTime() - (11 - index) * 7 * 24 * 60 * 60 * 1000).toISOString()
+    }
+  }
+  db.assessments = [
+    ...Array.from({ length: 12 }, (_, index) => makeAssessment('classroom', index)),
+    ...Array.from({ length: 12 }, (_, index) => makeAssessment('homework', index))
+  ]
+  const showcase = createShowcaseData(db, createdAt)
   db.students = showcase.students
   db.submissions = showcase.submissions
   db.practices = []
-  const structureAssessment = db.assessments.find(item => item.id === 'assessment-structure')
-  if (structureAssessment) {
-    structureAssessment.questionIds = ['q-structure-1', 'q-structure-2', 'q-structure-3', 'q-structure-photo']
-    structureAssessment.description = '4 道图示题，包含 1 道可拍照提交的综合分析题。'
-  }
+  db.videoProgress = []
   db.settings = {
     ...db.settings,
     demoShowcase: true,
-    demoSeedVersion: 7,
+    demoSeedVersion: 8,
     reportDiagnoses: {
       ...(db.settings?.reportDiagnoses || {}),
       'assessment-structure': {
@@ -152,13 +176,12 @@ function seed(): Database {
     ],
     questions: [...fourbarQuestions, ...gearQuestions, ...structureQuestions],
     assessments: [
-      { id: 'assessment-fourbar', courseId: 'course-fourbar', title: '急回特性 · 课堂即时诊断', description: '3 道图示题，检测极位夹角、行程速比系数与机构判断。', joinCode: 'JH083', questionIds: fourbarQuestions.map(question => question.id), status: 'closed', timeLimit: 6, createdAt },
-      { id: 'assessment-gear', courseId: 'course-gear', title: '定轴轮系 · 课堂即时诊断', description: '3 道图示题，检测传动比计算、惰轮作用与转向判断。', joinCode: 'LX112', questionIds: gearQuestions.map(question => question.id), status: 'closed', timeLimit: 6, createdAt },
-      { id: 'assessment-structure', courseId: 'course-structure', title: '平面机构结构分析 · 课堂即时诊断', description: '4 道图示题，包含 1 道可拍照提交的综合分析题。', joinCode: 'JG027', questionIds: structureQuestions.map(question => question.id), status: 'published', timeLimit: 10, publishedAt: createdAt, createdAt },
-      { id: 'assessment-photo-demo', courseId: 'course-structure', title: '结构分析综合题 · 拍照作答演示', description: '1 道 20 分综合分析题，用于演示学生手写过程拍照、视觉识别和 AI 诊断。', joinCode: 'PZ027', questionIds: ['q-structure-photo'], status: 'draft', timeLimit: 10, createdAt }
+      { id: 'assessment-fourbar', courseId: 'course-fourbar', title: '急回特性 · 课堂即时诊断', description: '3 道图示题，检测极位夹角、行程速比系数与机构判断。', joinCode: 'JH083', questionIds: fourbarQuestions.map(question => question.id), category: 'classroom', questionMode: 'fixed', status: 'closed', timeLimit: 6, createdAt },
+      { id: 'assessment-gear', courseId: 'course-gear', title: '定轴轮系 · 课堂即时诊断', description: '3 道图示题，检测传动比计算、惰轮作用与转向判断。', joinCode: 'LX112', questionIds: gearQuestions.map(question => question.id), category: 'classroom', questionMode: 'fixed', status: 'closed', timeLimit: 6, createdAt },
+      { id: 'assessment-structure', courseId: 'course-structure', title: '平面机构结构分析 · 课堂即时诊断', description: '4 道图示题，包含 1 道可拍照提交的综合分析题。', joinCode: 'JG027', questionIds: structureQuestions.map(question => question.id), category: 'classroom', questionMode: 'fixed', status: 'published', timeLimit: 10, publishedAt: createdAt, createdAt }
     ],
-    students: [], submissions: [], practices: [],
-    settings: { demoShowcase: true, demoSeedVersion: 7, network: { hotspotSsid: 'AI-Classroom', hotspotPassword: '12345678', preferredAddress: '' } }
+    students: [], submissions: [], practices: [], videoProgress: [],
+    settings: { demoShowcase: true, demoSeedVersion: 8, network: { hotspotSsid: 'AI-Classroom', hotspotPassword: '12345678', preferredAddress: '' } }
   }
   applyShowcaseData(db, createdAt)
   return db
@@ -173,15 +196,13 @@ function migrateShowcaseData(db: Database) {
       if (assessment.status === 'published' && assessment.id !== current.id) assessment.status = 'closed'
     })
   }
-  if ((db.settings?.demoSeedVersion || 0) < 7) {
+  if ((db.settings?.demoSeedVersion || 0) < 8) {
     const curated = seed()
     curated.questions.forEach(question => {
       const current = db.questions.find(item => item.id === question.id)
       if (current) Object.assign(current, question)
       else db.questions.push(question)
     })
-    const photoAssessment = curated.assessments.find(assessment => assessment.id === 'assessment-photo-demo')
-    if (photoAssessment && !db.assessments.some(assessment => assessment.id === photoAssessment.id)) db.assessments.push(photoAssessment)
   }
   applyShowcaseData(db)
 }
@@ -194,7 +215,7 @@ export class JsonStore {
     if (fs.existsSync(DB_PATH)) {
       try {
         this.data = JSON.parse(fs.readFileSync(DB_PATH, 'utf8')) as Database
-        if ((this.data.settings?.demoSeedVersion || 0) < 7) {
+        if ((this.data.settings?.demoSeedVersion || 0) < 8) {
           migrateShowcaseData(this.data)
           this.save()
         }
