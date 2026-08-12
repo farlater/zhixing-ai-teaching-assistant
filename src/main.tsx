@@ -8,7 +8,12 @@ import { registerSW } from 'virtual:pwa-register'
 
 const updateSW = registerSW({
   immediate: true,
-  onNeedRefresh() { void updateSW(true) }
+  onNeedRefresh() { void updateSW(true) },
+  onRegisteredSW(_url, registration) {
+    if (!registration) return
+    void registration.update()
+    window.setInterval(() => { void registration.update() }, 60_000)
+  }
 })
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

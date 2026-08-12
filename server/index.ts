@@ -7,9 +7,9 @@ import { store } from './store.js'
 import { asyncRoute, id, loadEnv, now } from './utils.js'
 import { extractMaterial } from './materials.js'
 import { extractWithMinerU, mineruReady, mineruSupports } from './mineru.js'
-import { generateQuestions, gradeSubjective, extractAnswerFromImage, teacherAssistant, describeInstructionalImage, bailianReady, generateClassDiagnosis, generatePracticeQuestion } from './ai.js'
+import { generateQuestions, gradeSubjective, extractAnswerFromImage, teacherAssistant, teacherAssistantStream, describeInstructionalImage, bailianReady, generateClassDiagnosis, generatePracticeQuestion } from './ai.js'
 import { programGrade } from './grading.js'
-import { buildClassReport, buildStudentProfile } from './reports.js'
+import { buildClassReport, buildStudentProfile, buildStudentRanking } from './reports.js'
 import { questionBank } from './questionBank.js'
 import { transcribeAudio } from './speech.js'
 import { buildRetrievedContext, knowledgeRoot, syncKnowledgeBase } from './knowledgeBase.js'
@@ -29,6 +29,18 @@ const upload = multer({
   }),
   limits: { fileSize: 200 * 1024 * 1024 }
 })
+
+function removeMaterialFiles(material: Material) {
+  if (material.path?.startsWith('/uploads/')) {
+    const relative = material.path.slice('/uploads/'.length).replace(/\//g, path.sep)
+    const filePath = path.resolve(uploadDir, relative)
+    if (filePath.startsWith(`${uploadDir}${path.sep}`) && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) fs.unlinkSync(filePath)
+  }
+  for (const [root, child] of [[path.resolve(uploadDir, 'materials'), material.id], [path.resolve('data', 'mineru'), material.id]] as const) {
+    const target = path.resolve(root, child)
+    if (target.startsWith(`${root}${path.sep}`) && fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true })
+  }
+}
 
 const aiConfigKeys = ['DASHSCOPE_API_KEY', 'MINERU_API_TOKEN', 'BAILIAN_BASE_URL', 'BAILIAN_TEXT_MODEL', 'BAILIAN_VISION_MODEL', 'BAILIAN_ASR_MODEL'] as const
 
@@ -152,6 +164,34 @@ app.patch('/api/courses/:id', (req, res) => {
   res.json(updated)
 })
 
+app.delete('/api/courses/:id', (req, res) => {
+  const db = store.read()
+  const course = db.courses.find(item => item.id === req.params.id)
+  if (!course) return res.status(404).json({ error: '课程不存在' })
+  const deleteLocalFiles = String(req.query.deleteLocalFiles || 'false') === 'true'
+  const materials = db.materials.filter(item => item.courseId === course.id)
+  const assessmentIds = new Set(db.assessments.filter(item => item.courseId === course.id).map(item => item.id))
+  const pointIds = new Set(db.knowledgePoints.filter(item => item.courseId === course.id).map(item => item.id))
+  if (deleteLocalFiles) {
+    materials.forEach(removeMaterialFiles)
+    const knowledgeDir = path.resolve(knowledgeRoot(), course.id.replace(/[^a-zA-Z0-9_-]/g, '-'))
+    const knowledgeBase = path.resolve(knowledgeRoot())
+    if (knowledgeDir.startsWith(`${knowledgeBase}${path.sep}`) && fs.existsSync(knowledgeDir)) fs.rmSync(knowledgeDir, { recursive: true, force: true })
+  }
+  store.update(data => {
+    data.courses = data.courses.filter(item => item.id !== course.id)
+    data.knowledgePoints = data.knowledgePoints.filter(item => item.courseId !== course.id)
+    data.materials = data.materials.filter(item => item.courseId !== course.id)
+    data.questions = data.questions.filter(item => item.courseId !== course.id)
+    data.assessments = data.assessments.filter(item => item.courseId !== course.id)
+    data.submissions = data.submissions.filter(item => !assessmentIds.has(item.assessmentId))
+    data.practices = data.practices.filter(item => !pointIds.has(item.knowledgePointId))
+    data.videoProgress = (data.videoProgress || []).filter(item => !assessmentIds.has(item.assessmentId))
+    if (data.settings?.reportDiagnoses) for (const assessmentId of assessmentIds) delete data.settings.reportDiagnoses[assessmentId]
+  })
+  res.json({ ok: true, deletedLocalFiles: deleteLocalFiles })
+})
+
 app.post('/api/courses/:courseId/knowledge-points', (req, res) => {
   const point: KnowledgePoint = { id: id('kp'), courseId: req.params.courseId, name: req.body.name, description: req.body.description || '', formula: req.body.formula || '', createdAt: now() }
   if (!point.name?.trim()) return res.status(400).json({ error: '知识点名称不能为空' })
@@ -162,6 +202,56 @@ app.post('/api/courses/:courseId/knowledge-points', (req, res) => {
 app.delete('/api/knowledge-points/:id', (req, res) => {
   store.update(db => { db.knowledgePoints = db.knowledgePoints.filter(item => item.id !== req.params.id) })
   res.status(204).end()
+})
+
+app.post('/api/courses/:courseId/tutorial-videos', upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: '请选择视频文件' })
+  const knowledgePointId = String(req.body.knowledgePointId || '')
+  const db = store.read()
+  if (!db.knowledgePoints.some(point => point.id === knowledgePointId && point.courseId === req.params.courseId)) {
+    if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path)
+    return res.status(400).json({ error: '请选择视频对应的知识点' })
+  }
+  if (!req.file.mimetype.startsWith('video/')) {
+    if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path)
+    return res.status(400).json({ error: '仅支持上传常见视频文件' })
+  }
+  let originalName = req.file.originalname
+  try { originalName = Buffer.from(originalName, 'latin1').toString('utf8') } catch { /* 保留原名 */ }
+  const materialId = id('video')
+  const relativeDir = path.join('tutorials', req.params.courseId, knowledgePointId)
+  const targetDir = path.resolve(uploadDir, relativeDir)
+  if (!targetDir.startsWith(`${uploadDir}${path.sep}`)) return res.status(400).json({ error: '视频目录无效' })
+  fs.mkdirSync(targetDir, { recursive: true })
+  const filename = `${materialId}${path.extname(originalName).toLowerCase() || '.mp4'}`
+  const target = path.join(targetDir, filename)
+  fs.renameSync(req.file.path, target)
+  const material: Material = {
+    id: materialId, courseId: req.params.courseId, knowledgePointId, kind: 'tutorial-video', name: originalName,
+    type: req.file.mimetype, size: req.file.size, extractedText: '讲解视频仅建立知识点目录索引，AI 不读取视频内容。',
+    path: `/uploads/${relativeDir.replace(/\\/g, '/')}/${filename}`, parser: 'builtin', status: 'ready', createdAt: now()
+  }
+  store.update(data => data.materials.push(material))
+  syncKnowledgeBase(store.read(), req.params.courseId)
+  res.status(201).json(material)
+})
+
+app.post('/api/tutorial-videos/:id/complete', (req, res) => {
+  const db = store.read()
+  const material = db.materials.find(item => item.id === req.params.id && item.kind === 'tutorial-video')
+  if (!material) return res.status(404).json({ error: '讲解视频不存在' })
+  const progress = {
+    id: id('video-progress'), materialId: material.id, studentId: String(req.body.studentId || ''),
+    assessmentId: String(req.body.assessmentId || ''), questionId: String(req.body.questionId || ''),
+    completed: true, watchedSeconds: Math.max(0, Number(req.body.watchedSeconds) || 0), completedAt: now(), createdAt: now()
+  }
+  if (!progress.studentId || !progress.assessmentId || !progress.questionId) return res.status(400).json({ error: '学习记录信息不完整' })
+  store.update(data => {
+    data.videoProgress ||= []
+    data.videoProgress = data.videoProgress.filter(item => !(item.studentId === progress.studentId && item.assessmentId === progress.assessmentId && item.questionId === progress.questionId))
+    data.videoProgress.push(progress)
+  })
+  res.json(progress)
 })
 
 app.post('/api/courses/:courseId/materials', upload.single('file'), asyncRoute(async (req, res) => {
@@ -282,16 +372,7 @@ app.post('/api/courses/:courseId/materials', upload.single('file'), asyncRoute(a
 app.delete('/api/materials/:id', (req, res) => {
   const db = store.read()
   const material = db.materials.find(item => item.id === req.params.id)
-  if (material?.path) {
-    const filePath = path.join(uploadDir, path.basename(material.path))
-    if (fs.existsSync(filePath) && path.dirname(filePath) === uploadDir) fs.unlinkSync(filePath)
-  }
-  const assetDir = path.resolve(uploadDir, 'materials', req.params.id)
-  const materialRoot = path.resolve(uploadDir, 'materials')
-  if (assetDir.startsWith(`${materialRoot}${path.sep}`) && fs.existsSync(assetDir)) fs.rmSync(assetDir, { recursive: true, force: true })
-  const structuredDir = path.resolve('data', 'mineru', req.params.id)
-  const structuredRoot = path.resolve('data', 'mineru')
-  if (structuredDir.startsWith(`${structuredRoot}${path.sep}`) && fs.existsSync(structuredDir)) fs.rmSync(structuredDir, { recursive: true, force: true })
+  if (material) removeMaterialFiles(material)
   store.update(data => { data.materials = data.materials.filter(item => item.id !== req.params.id) })
   if (material) syncKnowledgeBase(store.read(), material.courseId)
   res.status(204).end()
@@ -348,7 +429,10 @@ app.post('/api/assessments', (req, res) => {
   const code = Math.random().toString(36).slice(2, 7).toUpperCase()
   const assessment: Assessment = {
     id: id('assessment'), courseId: req.body.courseId, title: req.body.title, description: req.body.description || '', joinCode: code,
-    questionIds: req.body.questionIds || [], status: 'draft', timeLimit: Number(req.body.timeLimit) || 20, createdAt: now()
+    questionIds: req.body.questionIds || [], category: req.body.category === 'homework' ? 'homework' : 'classroom',
+    questionMode: ['fixed', 'pool', 'ai-variant'].includes(req.body.questionMode) ? req.body.questionMode : 'fixed',
+    questionCount: Number(req.body.questionCount) || req.body.questionIds?.length || 1,
+    status: 'draft', timeLimit: Number(req.body.timeLimit) || 20, createdAt: now()
   }
   if (!assessment.courseId || !assessment.title || !assessment.questionIds.length) return res.status(400).json({ error: '课程、课堂名称和题目不能为空' })
   store.update(db => db.assessments.push(assessment))
@@ -375,10 +459,38 @@ app.post('/api/assessments/:id/close', (req, res) => {
   res.json(assessment)
 })
 
-const classroomView = (assessment: Assessment) => {
+const stableHash = (value: string) => [...value].reduce((hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0, 0)
+
+function resolveAssessmentQuestions(db: ReturnType<typeof store.read>, assessment: Assessment, studentId?: string) {
+  const templates = assessment.questionIds.map(questionId => db.questions.find(item => item.id === questionId)).filter(Boolean) as Question[]
+  if (!studentId || assessment.questionMode === 'fixed') return templates
+  const desired = Math.max(1, assessment.questionCount || templates.length)
+  const selected: Question[] = []
+  const typeCounts = templates.reduce((map, question) => map.set(question.type, (map.get(question.type) || 0) + 1), new Map<Question['type'], number>())
+  for (const [type, count] of typeCounts) {
+    const candidates = db.questions.filter(question => question.courseId === assessment.courseId && question.status === 'confirmed' && question.type === type)
+      .sort((a, b) => stableHash(`${studentId}:${assessment.id}:${a.id}`) - stableHash(`${studentId}:${assessment.id}:${b.id}`))
+    selected.push(...candidates.slice(0, Math.min(count, desired - selected.length)))
+  }
+  if (selected.length < desired) {
+    const selectedIds = new Set(selected.map(question => question.id))
+    const remaining = db.questions.filter(question => question.courseId === assessment.courseId && question.status === 'confirmed' && !selectedIds.has(question.id))
+      .sort((a, b) => stableHash(`${studentId}:${assessment.id}:${a.id}`) - stableHash(`${studentId}:${assessment.id}:${b.id}`))
+    selected.push(...remaining.slice(0, desired - selected.length))
+  }
+  return selected.length ? selected : templates
+}
+
+function tutorialVideosFor(db: ReturnType<typeof store.read>, questions: Question[]) {
+  const pointIds = new Set(questions.map(question => question.knowledgePointId))
+  return db.materials.filter(material => material.kind === 'tutorial-video' && material.knowledgePointId && pointIds.has(material.knowledgePointId))
+}
+
+const classroomView = (assessment: Assessment, studentId?: string) => {
   const db = store.read()
   const course = db.courses.find(item => item.id === assessment.courseId)
-  const questions = assessment.questionIds.map(questionId => db.questions.find(item => item.id === questionId)).filter(Boolean).map(question => {
+  const assigned = resolveAssessmentQuestions(db, assessment, studentId)
+  const questions = assigned.map(question => {
     const { answer: _answer, explanation: _explanation, rubric: _rubric, ...safeQuestion } = question as Question
     return safeQuestion
   })
@@ -387,37 +499,27 @@ const classroomView = (assessment: Assessment) => {
 
 app.get('/api/classrooms/available', (_req, res) => {
   const assessments = store.read().assessments.filter(item => item.status === 'published')
-  res.json(assessments.map(classroomView))
+  res.json(assessments.map(assessment => classroomView(assessment)))
 })
 
 app.get('/api/classrooms/assessment/:id', (req, res) => {
   const assessment = store.read().assessments.find(item => item.id === req.params.id && item.status === 'published')
   if (!assessment) return res.status(404).json({ error: '未找到当前课堂' })
-  res.json(classroomView(assessment))
+  res.json(classroomView(assessment, String(req.query.studentId || '') || undefined))
 })
 
 app.get('/api/classrooms/:code', (req, res) => {
   const db = store.read()
   const assessment = db.assessments.find(item => item.joinCode.toUpperCase() === req.params.code.toUpperCase() && item.status === 'published')
   if (!assessment) return res.status(404).json({ error: '未找到正在进行的课堂，请返回入口重新选择' })
-  const course = db.courses.find(item => item.id === assessment.courseId)
-  const questions = assessment.questionIds.map(questionId => db.questions.find(item => item.id === questionId)).filter(Boolean).map(question => {
-    const { answer: _answer, explanation: _explanation, rubric: _rubric, ...safeQuestion } = question as Question
-    return safeQuestion
-  })
-  res.json({ assessment, course, questions, submittedCount: db.submissions.filter(item => item.assessmentId === assessment.id).length })
+  res.json(classroomView(assessment, String(req.query.studentId || '') || undefined))
 })
 
-app.get('/api/classrooms/active/current', (_req, res) => {
+app.get('/api/classrooms/active/current', (req, res) => {
   const db = store.read()
   const assessment = db.assessments.find(item => item.status === 'published')
   if (!assessment) return res.status(404).json({ error: '教师尚未发布检测' })
-  const course = db.courses.find(item => item.id === assessment.courseId)
-  const questions = assessment.questionIds.map(questionId => db.questions.find(item => item.id === questionId)).filter(Boolean).map(question => {
-    const { answer: _answer, explanation: _explanation, rubric: _rubric, ...safeQuestion } = question as Question
-    return safeQuestion
-  })
-  res.json({ assessment, course, questions, submittedCount: db.submissions.filter(item => item.assessmentId === assessment.id).length })
+  res.json(classroomView(assessment, String(req.query.studentId || '') || undefined))
 })
 
 app.post('/api/students/join', (req, res) => {
@@ -444,29 +546,32 @@ app.post('/api/submissions', asyncRoute(async (req, res) => {
   const db = store.read()
   const assessment = db.assessments.find(item => item.id === assessmentId)
   if (!assessment || assessment.status !== 'published') return res.status(409).json({ error: '课堂未发布或已经结束' })
+  const assignedQuestions = resolveAssessmentQuestions(db, assessment, studentId)
+  const assignedIds = new Set(assignedQuestions.map(question => question.id))
   const results = []
   for (const input of answers || []) {
     const question = db.questions.find(item => item.id === input.questionId)
-    if (!question || !assessment.questionIds.includes(question.id)) continue
+    if (!question || !assignedIds.has(question.id)) continue
     const actualAnswer = input.extractedText || input.answer || ''
     const graded = programGrade(question, actualAnswer) || await gradeSubjective(question, actualAnswer)
     results.push({ ...graded, answer: input.answer, imageUrl: input.imageUrl, extractedText: input.extractedText })
   }
-  const maxScore = assessment.questionIds.reduce((sum, questionId) => sum + (db.questions.find(question => question.id === questionId)?.maxScore || 0), 0)
+  const maxScore = assignedQuestions.reduce((sum, question) => sum + question.maxScore, 0)
   const submission: Submission = { id: id('submission'), assessmentId, studentId, answers: results, totalScore: results.reduce((sum, result) => sum + result.score, 0), maxScore, status: 'completed', submittedAt: now() }
   store.update(data => {
     data.submissions = data.submissions.filter(item => !(item.assessmentId === assessmentId && item.studentId === studentId))
     data.submissions.push(submission)
   })
   syncKnowledgeBase(store.read(), assessment.courseId)
-  res.status(201).json({ ...submission, questions: assessment.questionIds.map(questionId => db.questions.find(item => item.id === questionId)).filter(Boolean) })
+  res.status(201).json({ ...submission, questions: assignedQuestions, tutorialVideos: tutorialVideosFor(db, assignedQuestions) })
 }))
 
 app.get('/api/submissions/:assessmentId/:studentId', (req, res) => {
   const db = store.read()
   const submission = db.submissions.find(item => item.assessmentId === req.params.assessmentId && item.studentId === req.params.studentId)
   if (!submission) return res.status(404).json({ error: '未找到作答记录' })
-  res.json({ ...submission, questions: db.assessments.find(item => item.id === req.params.assessmentId)?.questionIds.map(questionId => db.questions.find(item => item.id === questionId)).filter(Boolean) })
+  const questions = submission.answers.map(answer => db.questions.find(item => item.id === answer.questionId)).filter(Boolean) as Question[]
+  res.json({ ...submission, questions, tutorialVideos: tutorialVideosFor(db, questions) })
 })
 
 app.get('/api/reports/:assessmentId', (req, res) => {
@@ -487,7 +592,8 @@ app.post('/api/reports/:assessmentId/diagnosis/refresh', asyncRoute(async (req, 
 
 app.get('/api/students', (_req, res) => {
   const db = store.read()
-  res.json(db.students.map(student => ({ ...student, submissionCount: db.submissions.filter(item => item.studentId === student.id).length })))
+  const ranking = new Map(buildStudentRanking(db).map(item => [item.id, item]))
+  res.json(db.students.map(student => ({ ...student, ...ranking.get(student.id) })).sort((a, b) => (a.rank || 9999) - (b.rank || 9999)))
 })
 
 app.get('/api/students/:id/profile', (req, res) => {
@@ -529,6 +635,25 @@ app.post('/api/assistant/chat', asyncRoute(async (req, res) => {
   const answer = await teacherAssistant(message, db, report, retrievedContext, globalPrompt)
   res.json({ answer, mode: bailianReady() ? 'bailian' : 'data-demo' })
 }))
+
+app.post('/api/assistant/chat/stream', async (req, res) => {
+  res.status(200).set({ 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-cache, no-transform', connection: 'keep-alive' })
+  res.flushHeaders()
+  try {
+    const db = store.read()
+    const assessmentId = req.body.assessmentId || db.assessments.find(item => item.status === 'published')?.id
+    const report = assessmentId ? buildClassReport(db, assessmentId) : null
+    const assessment = assessmentId ? db.assessments.find(item => item.id === assessmentId) : undefined
+    const message = String(req.body.message || '')
+    const retrievedContext = buildRetrievedContext(db, message, assessment?.courseId, assessmentId)
+    const promptPath = path.resolve('prompts', 'teacher-assistant.md')
+    const globalPrompt = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, 'utf8') : ''
+    await teacherAssistantStream(message, db, report, retrievedContext, globalPrompt, delta => res.write(`${JSON.stringify({ type: 'delta', text: delta })}\n`))
+    res.write(`${JSON.stringify({ type: 'done', mode: bailianReady() ? 'bailian' : 'data-demo' })}\n`)
+  } catch (error) {
+    res.write(`${JSON.stringify({ type: 'error', error: error instanceof Error ? error.message : 'AI 助教暂时无法回答' })}\n`)
+  } finally { res.end() }
+})
 
 app.post('/api/assistant/transcribe', upload.single('audio'), asyncRoute(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: '没有收到音频' })

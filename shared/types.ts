@@ -1,6 +1,8 @@
 export type QuestionType = 'single' | 'multiple' | 'truefalse' | 'blank' | 'short'
 export type Difficulty = '基础' | '进阶' | '挑战'
 export type Ability = '概念理解' | '公式掌握' | '公式应用' | '推理' | '计算' | '表达'
+export type AssessmentCategory = 'classroom' | 'homework'
+export type QuestionAssignmentMode = 'fixed' | 'pool' | 'ai-variant'
 
 export interface KnowledgePoint {
   id: string
@@ -25,6 +27,8 @@ export interface Material {
   knowledgeFile?: string
   parser?: 'mineru' | 'builtin'
   parserTaskId?: string
+  kind?: 'document' | 'tutorial-video'
+  knowledgePointId?: string
   status: 'ready' | 'processing' | 'failed'
   createdAt: string
 }
@@ -65,6 +69,9 @@ export interface Assessment {
   description: string
   joinCode: string
   questionIds: string[]
+  category: AssessmentCategory
+  questionMode: QuestionAssignmentMode
+  questionCount?: number
   status: 'draft' | 'published' | 'closed'
   timeLimit: number
   publishedAt?: string
@@ -120,6 +127,18 @@ export interface Practice {
   createdAt: string
 }
 
+export interface VideoProgress {
+  id: string
+  studentId: string
+  assessmentId: string
+  questionId: string
+  materialId: string
+  completed: boolean
+  watchedSeconds: number
+  completedAt?: string
+  createdAt: string
+}
+
 export interface Database {
   courses: Course[]
   knowledgePoints: KnowledgePoint[]
@@ -129,6 +148,7 @@ export interface Database {
   students: Student[]
   submissions: Submission[]
   practices: Practice[]
+  videoProgress: VideoProgress[]
   settings?: {
     demoShowcase?: boolean
     demoSeedVersion?: number

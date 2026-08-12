@@ -5,17 +5,22 @@ import type { ClassReport } from '../../shared/types'
 import { api, formatDate, post } from '../api'
 import { Empty, ScoreRing, Spinner } from '../components'
 
-type AssessmentOption = { id: string; title: string; status: string; submissionCount: number }
+type AssessmentOption = { id: string; title: string; status: string; submissionCount: number; category?: 'classroom' | 'homework' }
 const chartColors = ['#275d56', '#d99d68', '#789b91', '#b96d5a', '#7a738e']
 
 export default function Reports() {
   const [assessments, setAssessments] = useState<AssessmentOption[]>([])
   const [selectedId, setSelectedId] = useState('')
+  const [category, setCategory] = useState<'classroom' | 'homework'>('classroom')
   const [report, setReport] = useState<ClassReport>()
   const [loading, setLoading] = useState(true)
   const [refreshingDiagnosis, setRefreshingDiagnosis] = useState(false)
   const [diagnosisError, setDiagnosisError] = useState('')
-  useEffect(() => { api<AssessmentOption[]>('/api/assessments').then(list => { setAssessments(list); const id = list.find(item => item.submissionCount > 0)?.id || list[0]?.id || ''; setSelectedId(id) }) }, [])
+  useEffect(() => { api<AssessmentOption[]>('/api/assessments').then(list => { setAssessments(list); const id = list.find(item => (item.category || 'classroom') === 'classroom' && item.submissionCount > 0)?.id || list[0]?.id || ''; setSelectedId(id) }) }, [])
+  useEffect(() => {
+    const visible = assessments.filter(item => (item.category || 'classroom') === category)
+    if (visible.length && !visible.some(item => item.id === selectedId)) setSelectedId(visible.find(item => item.submissionCount > 0)?.id || visible[0].id)
+  }, [category, assessments, selectedId])
   useEffect(() => {
     if (!selectedId) return
     let active = true
@@ -35,8 +40,10 @@ export default function Reports() {
   if (loading || !report) return <Spinner label="正在计算真实作答数据" />
   const weakest = [...report.knowledgeMastery].sort((a, b) => a.value - b.value)[0]
   const hardest = [...report.questionStats].sort((a, b) => a.accuracy - b.accuracy)[0]
+  const visibleAssessments = assessments.filter(item => (item.category || 'classroom') === category)
   return <>
-    <section className="report-toolbar"><div><span>当前报告</span><select value={selectedId} onChange={event => setSelectedId(event.target.value)}>{assessments.map(item => <option value={item.id} key={item.id}>{item.title}</option>)}</select></div><div className="report-status"><span className="status-dot" />统计实时更新 · {report.submittedCount} 份作答</div></section>
+    <div className="assessment-tabs report-tabs"><button className={category === 'classroom' ? 'active' : ''} onClick={() => setCategory('classroom')}>课堂检测报告</button><button className={category === 'homework' ? 'active' : ''} onClick={() => setCategory('homework')}>课后作业报告</button></div>
+    <section className="report-toolbar"><div><span>当前报告</span><select value={selectedId} onChange={event => setSelectedId(event.target.value)}>{visibleAssessments.map(item => <option value={item.id} key={item.id}>{item.title}</option>)}</select></div><div className="report-status"><span className="status-dot" />统计实时更新 · {report.submittedCount} 份作答</div></section>
     <section className="report-summary">
       <div className="report-score panel"><ScoreRing value={report.accuracy} label="整体掌握" size={138} /><div><span>班级平均分</span><strong>{report.averageScore}</strong><small>本次检测原始分</small></div></div>
       <div className="insight-card warm"><div className="insight-icon"><Target /></div><div><span>最薄弱知识点</span><strong>{weakest?.name || '暂无'}</strong><p>掌握度 {weakest?.value || 0}%，建议优先回讲</p></div><ArrowDown /></div>

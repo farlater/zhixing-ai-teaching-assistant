@@ -33,25 +33,31 @@ test('主观题演示评分始终限制在合法分值内', () => {
   assert.ok(result.score >= 0 && result.score <= question.maxScore)
 })
 
-test('展示数据包含60名大学课程学生、综合题和缓存诊断', () => {
+test('展示数据包含60名大学课程学生、12次课堂检测、12次作业和综合题', () => {
   const db = store.reset()
-  const report = buildClassReport(db, 'assessment-fourbar')
+  const report = buildClassReport(db, 'demo-classroom-01')
   const structureReport = buildClassReport(db, 'assessment-structure')
   assert.equal(db.courses.length, 3)
   assert.equal(db.questions.length, 10)
   assert.equal(db.students.length, 60)
-  assert.equal(db.submissions.length, 60)
-  assert.equal(report?.submittedCount, 0)
+  assert.equal(db.assessments.filter(item => item.category === 'classroom').length, 12)
+  assert.equal(db.assessments.filter(item => item.category === 'homework').length, 12)
+  assert.equal(db.submissions.length, 1440)
+  assert.equal(report?.submittedCount, 60)
   assert.equal(report?.questionStats.length, 3)
   assert.equal(structureReport?.submittedCount, 60)
   assert.equal(structureReport?.questionStats.length, 4)
   assert.equal(structureReport?.diagnosis.source, 'preset')
   assert.match(structureReport?.diagnosis.summary || '', /局部自由度|高副低代/)
   assert.ok((report?.knowledgeMastery.length || 0) >= 3)
-  assert.equal(buildStudentProfile(db, 'demo-student-01')?.student.className, '机械2301班')
+  const profile = buildStudentProfile(db, 'demo-student-01')
+  assert.equal(profile?.student.className, '机械2301班')
+  assert.equal(profile?.history.length, 12)
+  assert.ok((profile?.weightedScore || 0) > 0)
   assert.equal(db.assessments.filter(item => item.status === 'published').length, 1)
   assert.equal(db.questions.find(item => item.id === 'q-structure-photo')?.type, 'short')
-  assert.deepEqual(db.assessments.find(item => item.id === 'assessment-photo-demo')?.questionIds, ['q-structure-photo'])
+  assert.equal(db.assessments.some(item => item.id === 'assessment-photo-demo'), false)
+  assert.ok(db.assessments.find(item => item.id === 'assessment-structure')?.questionIds.includes('q-structure-photo'))
 })
 
 test('DeepSeek 返回外层对象、数组和尾部说明时仍能解析题目 JSON', () => {
@@ -66,8 +72,8 @@ test('课堂数据能生成目录化知识文件并按问题检索', () => {
   syncKnowledgeBase(db, 'course-fourbar')
   const base = path.resolve('data', 'knowledge', 'course-fourbar')
   assert.ok(fs.existsSync(path.join(base, '00-course.md')))
-  assert.equal(fs.existsSync(path.join(base, '04-classrooms', 'assessment-fourbar', 'submissions', 'demo-student-01.md')), false)
-  const context = buildRetrievedContext(db, '这节课的行程速比系数公式是什么', 'course-fourbar', 'assessment-fourbar')
+  assert.equal(fs.existsSync(path.join(base, '04-classrooms', 'demo-classroom-01', 'submissions', 'demo-student-01.md')), true)
+  const context = buildRetrievedContext(db, '这节课的行程速比系数公式是什么', 'course-fourbar', 'demo-classroom-01')
   assert.match(context, /来源：course-fourbar\//)
   assert.match(context, /K=\(180°\+θ\)\/\(180°-θ\)/)
 })
@@ -107,7 +113,7 @@ test('强化练习提示词会携带上一轮作答、诊断和公式', async ()
   const db = store.reset()
   const point = db.knowledgePoints.find(item => item.id === 'kp-structure-analysis')!
   const sourceQuestion = db.questions.find(item => item.id === 'q-structure-photo')!
-  const lastAnswer = db.submissions[0].answers.find(item => item.questionId === sourceQuestion.id)!
+  const lastAnswer = db.submissions.flatMap(item => item.answers).find(item => item.questionId === sourceQuestion.id)!
   try {
     globalThis.fetch = async (_input, init) => {
       const body = JSON.parse(String(init?.body)) as { messages: { role: string; content: string }[] }
