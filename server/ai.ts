@@ -145,6 +145,51 @@ export async function generateQuestions(config: GenerateConfig, db: Database): P
   })) as Question[]
 }
 
+export async function generateQuestionVariants(config: GenerateConfig, db: Database, templates: Question[]): Promise<Question[]> {
+  if (!bailianReady()) throw new Error('尚未配置百炼 API，不能生成题库数值变式。')
+  const numericTemplates = templates.filter(question => /\d/.test(`${question.stem}\n${question.answer}\n${question.formula || ''}`))
+  if (!numericTemplates.length) throw new Error('选中的题库题目没有可修改的数值条件，请换题或选择“题库优先，AI 补充”。')
+  const selected = Array.from({ length: config.count }, (_, index) => numericTemplates[index % numericTemplates.length])
+  const compact = selected.map((question, index) => ({
+    index,
+    knowledgePointId: question.knowledgePointId,
+    type: question.type,
+    stem: question.stem,
+    options: question.options,
+    answer: question.answer,
+    explanation: question.explanation,
+    rubric: question.rubric,
+    formula: question.formula,
+    maxScore: question.maxScore,
+    abilities: question.abilities
+  }))
+  const prompt = `请把下面 ${selected.length} 道题库模板改成数值变式题。只允许修改已知数值、量纲以及随之变化的选项、答案和解析，不改变原考点、题型、难度、机构图含义或评分能力。必须重新计算并核验答案；不得虚构新图片。题干原有 Markdown 图片引用必须原样保留。\n题库模板：${JSON.stringify(compact)}\n返回 JSON 对象 {"questions":[...]}，每题包含 knowledgePointId,type,stem,options,answer,explanation,rubric,formula,maxScore,abilities，顺序与模板一致。`
+  const raw = await chat([
+    { role: 'system', content: `${promptFile('question-generation', '你是高校课程的教学诊断出题助教，只输出指定 JSON。')}\n\n本次任务是题库数值变式：必须重算答案，保持原图引用和知识点不变。` },
+    { role: 'user', content: prompt }
+  ], { json: true, temperature: .15, maxTokens: 4096 })
+  const parsed = extractModelJson(raw) as { questions?: Partial<Question>[] }
+  if (!Array.isArray(parsed.questions)) throw new Error('AI 返回结果中缺少 questions 数组，请重试。')
+  return selected.map((template, index) => {
+    const variant = parsed.questions?.[index] || {}
+    const imageMarkdown = template.stem.match(/!\[[^\]]*\]\([^\s)]+(?:\s+"[^"]*")?\)/g)?.join('\n\n') || ''
+    let stem = String(variant.stem || template.stem)
+    if (imageMarkdown && !/!\[[^\]]*\]\(/.test(stem)) stem = `${imageMarkdown}\n\n${stem}`
+    return {
+      ...template,
+      ...variant,
+      id: id('q'),
+      courseId: config.courseId,
+      knowledgePointId: template.knowledgePointId,
+      type: template.type,
+      stem,
+      source: 'ai',
+      status: 'draft',
+      createdAt: now()
+    } as Question
+  })
+}
+
 export async function gradeSubjective(question: Question, answer: string | string[]): Promise<AnswerResult> {
   if (!bailianReady()) return heuristicSubjectiveGrade(question, answer)
   const prompt = `题目：${question.stem}\n学生答案：${Array.isArray(answer) ? answer.join('、') : answer}\n参考答案：${Array.isArray(question.answer) ? question.answer.join('、') : question.answer}\n满分：${question.maxScore}\n评分标准：${question.rubric || question.explanation}\n能力维度：${question.abilities.join('、')}\n请严格依据学生实际作答评分。返回 JSON：{"score":数字,"correct":布尔,"diagnosis":{"summary":"","errorLocation":"","errorReason":"","errorType":"","suggestion":"","relatedConcept":"","abilityScores":{}}}。得分范围 0-${question.maxScore}。`
